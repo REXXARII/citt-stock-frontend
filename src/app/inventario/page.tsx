@@ -36,12 +36,28 @@ export default function InventarioPage() {
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState<boolean>(false);
 
+  const items: Item[] = mockItems.data.map((item) => ({
+    id: item.id,
+    name: item.name,
+    category_id: item.category.id,
+    location_id: item.location.id,
+    status: item.status === 'OPERATIVE'
+      ? 'Operativo'
+      : item.status === 'EN_MANTENCION'
+        ? 'En Mantención'
+        : 'En Reparación',
+    stock: 1,
+    unit: 'uds',
+    is_consumable: false,
+    qr_code: item.code,
+  }));
+
   // Simulación de sesión: Administrador (Paz Constanza Morales Saavedra)
-  const currentUser = mockUsers.find((u) => u.name.includes('Paz Constanza Morales')) || mockUsers[0];
-  const isAdmin = currentUser.role === 'Administrador';
+  const currentUser = mockUsers.data.find((u) => u.name.includes('Paz Constanza Morales')) || mockUsers.data[0];
+  const isAdmin = currentUser.role === 'ADMINISTRADOR';
 
   const getCategoryName = (categoryId: string) => {
-    return mockCategories.find((c) => c.id === categoryId)?.name || 'General';
+    return mockCategories.data.find((c) => c.id === categoryId)?.name || 'General';
   };
 
   const getLocationLabel = (locationId: string) => {
@@ -53,11 +69,11 @@ export default function InventarioPage() {
         </span>
       );
     }
-    const loc = mockLocations.find((l) => l.id === locationId);
+    const loc = mockLocations.data.find((l) => l.id === locationId);
     return (
       <span className="inline-flex items-center gap-1 text-slate-700 text-sm">
         <MapPin className="w-3.5 h-3.5 text-sky-500" />
-        {loc ? `${loc.code} - ${loc.name}` : locationId}
+        {loc ? loc.name : locationId}
       </span>
     );
   };
@@ -152,7 +168,7 @@ export default function InventarioPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockItems.map((item) => (
+              {items.map((item) => (
                 <TableRow
                   key={item.id}
                   onClick={() => handleRowClick(item)}

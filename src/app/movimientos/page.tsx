@@ -2,8 +2,8 @@
 
 import React, { useState } from 'react';
 import { mockItems, mockUsers } from '@/lib/mockData';
-import { MovementType, SchoolType, RoleName } from '@/types';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/Card';
+import { Item, MovementType, SchoolType } from '@/types';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -38,7 +38,18 @@ const SCHOOLS: SchoolType[] = [
 export default function MovimientosPage() {
   // Simulador de usuario activo para probar perfiles
   const [currentUserIndex, setCurrentUserIndex] = useState<number>(0);
-  const currentUser = mockUsers[currentUserIndex] || mockUsers[0];
+  const currentUser = mockUsers.data[currentUserIndex] || mockUsers.data[0];
+  const items: Item[] = mockItems.data.map((item) => ({
+    id: item.id,
+    name: item.name,
+    category_id: item.category.id,
+    location_id: item.location.id,
+    status: 'Operativo',
+    stock: 1,
+    unit: 'uds',
+    is_consumable: false,
+    qr_code: item.code,
+  }));
 
   // Estado del Formulario
   const [movementType, setMovementType] = useState<MovementType>('PRESTAMO');
@@ -48,7 +59,7 @@ export default function MovimientosPage() {
   const [quantity, setQuantity] = useState<number>(1);
   const [notes, setNotes] = useState<string>('');
 
-  const selectedItem = mockItems.find((i) => i.id === selectedItemId);
+  const selectedItem = items.find((i) => i.id === selectedItemId);
 
   // Detección de consumible (Filamento 3D / PLA / Resina)
   const isFilament =
@@ -57,9 +68,9 @@ export default function MovimientosPage() {
     selectedItem?.name.toLowerCase().includes('pla');
 
   // Cálculos y validaciones de permisos
-  const isGlobalUser = currentUser.role === ('Usuario Global' as RoleName);
+  const isGlobalUser = currentUser.role === 'USUARIO_GLOBAL';
   const isBlocked = currentUser.is_blocked;
-  const canDirectConfirm = currentUser.role === 'Administrador' || currentUser.role === 'Alumno Líder';
+  const canDirectConfirm = currentUser.role === 'ADMINISTRADOR' || currentUser.role === 'ALUMNO_LIDER';
 
   // Manejo de envío
   const handleSubmit = (e: React.FormEvent) => {
@@ -108,7 +119,7 @@ export default function MovimientosPage() {
           <span className="font-semibold text-slate-800">Simulador de Rol:</span> Cambia de cuenta para probar las validaciones de UI.
         </div>
         <div className="flex gap-2">
-          {mockUsers.map((user, idx) => (
+          {mockUsers.data.map((user, idx) => (
             <button
               key={user.id}
               onClick={() => setCurrentUserIndex(idx)}
@@ -217,7 +228,7 @@ export default function MovimientosPage() {
                     <SelectValue placeholder="Seleccionar activo del catálogo" />
                   </SelectTrigger>
                   <SelectContent>
-                    {mockItems.map((item) => (
+                    {items.map((item) => (
                       <SelectItem key={item.id} value={item.id}>
                         {item.name} ({item.stock} {item.unit} disp.)
                       </SelectItem>
