@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTheme } from 'next-themes';
 import {
   Box,
   Package,
@@ -22,12 +23,11 @@ import { Button } from '@/components/ui/button';
 
 export function LayoutShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
   const pathname = usePathname();
+  const { resolvedTheme, setTheme } = useTheme();
 
   const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
-    document.documentElement.classList.toggle('dark');
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
   };
 
   const navItems = [
@@ -42,7 +42,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   ];
 
   return (
-    <div className={`min-h-screen flex bg-slate-50 text-slate-800 ${darkMode ? 'dark bg-[#0b0f17] text-slate-100' : ''}`}>
+    <div className="min-h-screen flex bg-slate-50 text-slate-800 dark:bg-[#0b0f17] dark:text-slate-100">
       {/* Sidebar fijo */}
       <aside
         className={`${
@@ -107,8 +107,14 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
               <ShieldCheck className="w-3.5 h-3.5 text-sky-600 mr-1.5" />
               Paz Constanza Morales Saavedra
             </Badge>
-            <Button variant="ghost" size="icon" onClick={toggleDarkMode} className="h-8 w-8 text-slate-500">
-              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleDarkMode}
+              aria-label={resolvedTheme === 'dark' ? 'Activar modo claro' : 'Activar modo oscuro'}
+              className="h-8 w-8 text-slate-500"
+            >
+              {resolvedTheme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </Button>
           </div>
         </header>

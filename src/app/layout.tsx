@@ -3,6 +3,7 @@ import { Inter, Montserrat } from "next/font/google";
 import "./globals.css";
 import { LayoutShell } from "@/components/layout-shell";
 import { Toaster } from "sonner";
+import { ThemeProvider } from "next-themes";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -24,10 +25,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="es"
       className={`${inter.variable} ${montserrat.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
-        <LayoutShell>{children}</LayoutShell>
-        <Toaster richColors position="top-right" />
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+          <LayoutShell>{children}</LayoutShell>
+          <Toaster richColors position="top-right" />
+        </ThemeProvider>
       </body>
     </html>
   );
