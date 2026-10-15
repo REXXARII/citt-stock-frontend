@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
@@ -51,9 +52,13 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
       >
         <div className="p-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-3 overflow-hidden">
-            <div className="w-9 h-9 rounded-xl bg-sky-600 flex items-center justify-center font-bold text-white shadow-md shadow-sky-500/20 flex-shrink-0">
-              <Box className="w-5 h-5" />
-            </div>
+            <Image
+              src="/citt-logo.png"
+              alt="Logo CITT"
+              width={36}
+              height={36}
+              className="h-9 w-9 flex-shrink-0 rounded-full object-cover shadow-md shadow-sky-500/20"
+            />
             {!collapsed && (
               <div className="truncate">
                 <h1 className="font-bold text-sm leading-none text-slate-800 dark:text-white">CITT Stock</h1>
