@@ -139,11 +139,6 @@ export function AuthScreen({ members, open, onAuthenticate, onRegister }: AuthSc
           <Button type="submit" className="w-full">{tab === 'login' ? 'Ingresar' : 'Crear cuenta y continuar'}</Button>
         </form>
 
-        <div className="rounded-xl bg-sky-500/10 p-3 text-xs leading-relaxed text-sky-800 dark:text-sky-200">
-          <p className="font-bold">Acceso de demostración</p>
-          <p>Administrador: 16.321.654-8 · Ayudante: 19.882.112-k · Usuario global: 18.765.432-1</p>
-          <p>Contraseña para los tres perfiles: <span className="font-mono font-bold">citt2026</span></p>
-        </div>
         <p className="text-center text-[10px] text-slate-400">Autenticación local de demostración; no reemplaza un servicio de acceso real.</p>
       </section>
     </div>
