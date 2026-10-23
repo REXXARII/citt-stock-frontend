@@ -1,12 +1,13 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Check, PackageCheck, Search, Send, X } from 'lucide-react';
+import { Check, PackageCheck, Send, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppState, type OrderRecord, type OrderStatus } from '@/components/app-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ViewToolbar } from '@/components/view-toolbar';
 
 const statusStyle: Record<OrderStatus, string> = {
   Solicitado: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -28,13 +29,18 @@ export default function GestionPedidosPage() {
   const { role, currentUser, data, setData } = useAppState();
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('Todos');
+  const [typeFilter, setTypeFilter] = useState('Todos los Tipos');
+  const [dateFilter, setDateFilter] = useState('');
+  const [view, setView] = useState<'list' | 'grid'>('list');
   const [observation, setObservation] = useState('');
   const [rejectingId, setRejectingId] = useState<string | null>(null);
 
   const filteredOrders = useMemo(() => data.orders.filter((order) => {
     const searchMatches = `${order.id} ${order.assetName} ${order.requester} ${order.run}`.toLowerCase().includes(query.toLowerCase());
-    return searchMatches && (statusFilter === 'Todos' || order.status === statusFilter);
-  }), [data.orders, query, statusFilter]);
+    const typeMatches = typeFilter === 'Todos los Tipos' || (order.movementType ?? 'PEDIDO') === typeFilter;
+    const dateMatches = !dateFilter || order.createdAt.slice(0, 10) === dateFilter;
+    return searchMatches && typeMatches && dateMatches && (statusFilter === 'Todos' || order.status === statusFilter);
+  }), [data.orders, dateFilter, query, statusFilter, typeFilter]);
 
   const updateOrder = (id: string, status: OrderStatus, note = '') => {
     if (role === 'GLOBAL') {
@@ -113,20 +119,26 @@ export default function GestionPedidosPage() {
       </div>
 
       <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#111827]">
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_220px]">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por pedido, RUN, solicitante o activo..." className="pl-9" />
-          </div>
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-slate-200 bg-background px-3 py-2 text-sm dark:border-slate-700">
-            {['Todos', 'Solicitado', 'Aceptado', 'Preparado', 'Enviado', 'Recibido', 'Rechazado'].map((status) => <option key={status}>{status}</option>)}
-          </select>
-        </div>
+        <ViewToolbar
+          query={query}
+          onQueryChange={setQuery}
+          searchPlaceholder="Buscar por pedido, RUN, solicitante o activo..."
+          date={dateFilter}
+          onDateChange={setDateFilter}
+          filter={typeFilter}
+          filterOptions={['Todos los Tipos', 'PRESTAMO', 'PEDIDO', 'DEVOLUCION', 'BAJA'].map((item) => ({ value: item, label: item === 'Todos los Tipos' ? item : item === 'PRESTAMO' ? 'Préstamo' : item === 'DEVOLUCION' ? 'Devolución' : item === 'PEDIDO' ? 'Pedido' : 'Baja' }))}
+          onFilterChange={setTypeFilter}
+          pills={['Todos', 'Solicitado', 'Aceptado', 'Preparado', 'Enviado', 'Recibido', 'Rechazado'].map((item) => ({ value: item, label: item }))}
+          activePill={statusFilter}
+          onPillChange={setStatusFilter}
+          view={view}
+          onViewChange={setView}
+        />
 
         {!filteredOrders.length ? (
           <p className="py-10 text-center text-sm text-slate-500">No hay pedidos para mostrar con estos filtros.</p>
         ) : (
-          <div className="space-y-3">
+          <div className={view === 'list' ? 'space-y-3' : 'grid grid-cols-1 gap-3 xl:grid-cols-2'}>
             {filteredOrders.map((order: OrderRecord) => {
               const step = nextStep[order.status];
               const Icon = step?.icon;

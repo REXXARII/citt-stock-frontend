@@ -2,13 +2,14 @@
 
 import Image from 'next/image';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarClock, CheckCircle2, Download, FileText, PenTool, PlusCircle, Scale, Search, ShieldAlert } from 'lucide-react';
+import { CalendarClock, CheckCircle2, Download, FileText, PenTool, PlusCircle, Scale, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppState, type MovementType, type OrderRecord } from '@/components/app-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { ViewToolbar } from '@/components/view-toolbar';
 
 const schools = ['Construcción', 'Mecánica', 'Administración', 'Informática', 'Salud', 'Turismo', 'Naturaleza'];
 
@@ -28,6 +29,8 @@ export default function MovimientosPage() {
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('Todos');
   const [dateFilter, setDateFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('Todos');
+  const [view, setView] = useState<'list' | 'grid'>('list');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const hasSignature = useRef(false);
@@ -43,8 +46,9 @@ export default function MovimientosPage() {
     const queryMatches = `${order.id} ${order.assetCode} ${order.assetName} ${order.requester} ${order.run} ${order.school}`.toLowerCase().includes(query.toLowerCase());
     const typeMatches = typeFilter === 'Todos los Tipos' || typeFilter === movementName;
     const dateMatches = !dateFilter || order.createdAt.slice(0, 10) === dateFilter;
-    return queryMatches && typeMatches && dateMatches;
-  }), [data.orders, dateFilter, query, typeFilter]);
+    const statusMatches = statusFilter === 'Todos' || order.status === statusFilter;
+    return queryMatches && typeMatches && dateMatches && statusMatches;
+  }), [data.orders, dateFilter, query, statusFilter, typeFilter]);
   const today = dateKey(new Date());
   const movementsToday = data.orders.filter((order) =>
     dateKey(new Date(order.createdAt)) === today,
@@ -226,17 +230,22 @@ export default function MovimientosPage() {
       </section>
 
       <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800/90 dark:bg-[#111827]">
-        <div className="flex flex-col gap-3 md:flex-row">
-          <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por RUN, Alumno, Equipo o ID transacción..." className="h-11 pl-10 text-xs" />
-          </div>
-          <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} aria-label="Filtrar por tipo de movimiento" className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-3.5 text-xs text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
-            {['Todos los Tipos', 'Préstamo', 'Devolución', 'Pedido', 'Baja'].map((item) => <option key={item}>{item}</option>)}
-          </select>
-          <Input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} aria-label="Filtrar por fecha" className="h-11 w-full text-xs md:w-auto" />
-        </div>
-        <div className="overflow-x-auto">
+        <ViewToolbar
+          query={query}
+          onQueryChange={setQuery}
+          searchPlaceholder="Buscar por RUN, alumno, equipo o ID transacción..."
+          date={dateFilter}
+          onDateChange={setDateFilter}
+          filter={typeFilter}
+          filterOptions={['Todos los Tipos', 'Préstamo', 'Devolución', 'Pedido', 'Baja'].map((item) => ({ value: item, label: item }))}
+          onFilterChange={setTypeFilter}
+          pills={['Todos', 'Solicitado', 'Aceptado', 'Preparado', 'Enviado', 'Recibido', 'Rechazado'].map((item) => ({ value: item, label: item }))}
+          activePill={statusFilter}
+          onPillChange={setStatusFilter}
+          view={view}
+          onViewChange={setView}
+        />
+        {view === 'list' ? <div className="overflow-x-auto">
           <table className="w-full min-w-[1050px] text-left text-xs">
             <thead className="border-b border-slate-200 text-slate-400 dark:border-slate-800">
               <tr>{['Folio / Fecha', 'Activo seleccionado', 'Cantidad', 'Responsable / Solicitante', 'Tipo de movimiento', 'Fecha límite / Retorno', 'Firma / Recibo'].map((label) => <th key={label} className="px-2 py-3 font-semibold uppercase">{label}</th>)}</tr>
@@ -285,8 +294,20 @@ export default function MovimientosPage() {
               })}
             </tbody>
           </table>
-          {!visibleOrders.length && <div className="py-10 text-center text-sm text-slate-500"><CalendarClock className="mx-auto mb-2 h-6 w-6" />Todavía no hay movimientos para este filtro.</div>}
-        </div>
+        </div> : <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {visibleOrders.map((order) => (
+            <article key={order.id} className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+              <div className="flex items-start justify-between gap-2"><div><p className="font-mono text-xs font-bold text-sky-600">#{order.id}</p><p className="mt-1 text-[11px] text-slate-400">{new Date(order.createdAt).toLocaleString('es-CL')}</p></div><Badge variant="outline">{movementTypeLabel(order.movementType ?? 'PRESTAMO')}</Badge></div>
+              <div><h3 className="font-bold">{order.assetName}</h3><p className="font-mono text-[11px] text-slate-400">{order.assetCode}</p></div>
+              <p className="text-xs text-slate-500">{order.quantity} {order.unit} · {order.requester} ({order.run || 'RUN no registrado'})</p>
+              <p className="text-xs text-slate-500">{order.school} · {order.status}</p>
+              {order.signatureData
+                ? <Button size="sm" variant="outline" onClick={() => setReceiptOrder(order)}><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Ver firma</Button>
+                : <p className="text-xs text-slate-400">{order.movementType === 'BAJA' ? 'Acta de Baja' : 'Sin firma'}</p>}
+            </article>
+          ))}
+        </div>}
+        {!visibleOrders.length && <div className="py-10 text-center text-sm text-slate-500"><CalendarClock className="mx-auto mb-2 h-6 w-6" />Todavía no hay movimientos para este filtro.</div>}
       </section>
 
       <Dialog open={registerOpen} onOpenChange={setRegisterOpen}>

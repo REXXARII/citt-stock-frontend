@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Clock3, Download, Eye, Grid2X2, List, MapPin, PackagePlus, Plus, Printer, Search, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { AlertTriangle, Clock3, Download, Eye, MapPin, PackagePlus, Plus, Printer, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppState, type AssetCategory, type AssetRecord, type AssetUnit } from '@/components/app-state';
 import { AssetImage } from '@/components/asset-image';
@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { ViewToolbar } from '@/components/view-toolbar';
 import { QRCodeSVG } from 'qrcode.react';
 
 const defaultCategories: AssetCategory[] = ['Equipamiento', '3D', 'Talleres', 'Mobiliario'];
@@ -39,6 +40,8 @@ export default function InventarioPage() {
   const categories = [...new Set([...defaultCategories, ...data.settings.categories.map((item) => item.name)])];
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<AssetCategory | 'Todos'>('Todos');
+  const [statusFilter, setStatusFilter] = useState('Todos');
+  const [dateFilter, setDateFilter] = useState('');
   const [view, setView] = useState<'list' | 'grid'>('list');
   const [selected, setSelected] = useState<AssetRecord | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -57,8 +60,10 @@ export default function InventarioPage() {
   const filteredAssets = useMemo(() => data.assets.filter((asset) => {
     const matchesCategory = category === 'Todos' || asset.category === category;
     const matchesQuery = `${asset.code} ${asset.name} ${asset.location}`.toLowerCase().includes(query.toLowerCase());
-    return matchesCategory && matchesQuery;
-  }), [category, data.assets, query]);
+    const matchesStatus = statusFilter === 'Todos' || asset.status === statusFilter;
+    const matchesDate = !dateFilter || data.orders.some((order) => order.assetCode === asset.code && order.createdAt.slice(0, 10) === dateFilter);
+    return matchesCategory && matchesQuery && matchesStatus && matchesDate;
+  }), [category, data.assets, data.orders, dateFilter, query, statusFilter]);
   const selectedAsset = selected
     ? data.assets.find((asset) => asset.code === selected.code) ?? null
     : null;
@@ -220,16 +225,28 @@ export default function InventarioPage() {
       {role !== 'ADMIN' && <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">El rol actual puede consultar el inventario, pero no agregar activos ni reponer stock.</p>}
 
       <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-[#111827]">
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por código, nombre o ubicación..." className="pl-9" /></div>
-          <div className="flex gap-2">
-            <Button size="icon" variant={view === 'list' ? 'default' : 'outline'} onClick={() => setView('list')} aria-label="Vista de lista"><List className="h-4 w-4" /></Button>
-            <Button size="icon" variant={view === 'grid' ? 'default' : 'outline'} onClick={() => setView('grid')} aria-label="Vista de tarjetas"><Grid2X2 className="h-4 w-4" /></Button>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {(['Todos', ...categories] as const).map((item) => <Button key={item} size="sm" variant={category === item ? 'default' : 'outline'} onClick={() => setCategory(item)}>{item}</Button>)}
-        </div>
+        <ViewToolbar
+          query={query}
+          onQueryChange={setQuery}
+          searchPlaceholder="Buscar por código, nombre o ubicación..."
+          date={dateFilter}
+          onDateChange={setDateFilter}
+          dateLabel="Filtrar por fecha de movimiento"
+          filter={category}
+          filterOptions={[{ value: 'Todos', label: 'Todas las Categorías' }, ...categories.map((item) => ({ value: item, label: item }))]}
+          onFilterChange={(value) => setCategory(value as AssetCategory | 'Todos')}
+          pills={[
+            { value: 'Todos', label: 'Todos' },
+            { value: 'Disponible', label: 'Disponible' },
+            { value: 'Stock Crítico', label: 'Stock Crítico' },
+            { value: 'En Préstamo', label: 'En Préstamo' },
+            { value: 'De Baja', label: 'De Baja' },
+          ]}
+          activePill={statusFilter}
+          onPillChange={setStatusFilter}
+          view={view}
+          onViewChange={setView}
+        />
         {view === 'list' ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[850px] text-left text-xs">
