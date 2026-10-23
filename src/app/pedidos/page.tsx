@@ -132,7 +132,7 @@ export default function PedidosPage() {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-2xl bg-gradient-to-r from-cyan-700 to-sky-500 p-6 text-white shadow-lg md:p-8">
+      <section className="rounded-2xl bg-linear-to-r from-cyan-700 to-sky-500 p-6 text-white shadow-lg md:p-8">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-white/75">Catálogo CITT Stock</p>
@@ -167,7 +167,7 @@ export default function PedidosPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {filteredAssets.map((asset) => (
               <article key={asset.code} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#111827]">
-                <div className="flex h-36 items-center justify-center bg-gradient-to-br from-sky-500/10 to-cyan-500/20 text-sky-600 dark:text-sky-400">
+                <div className="flex h-36 items-center justify-center bg-linear-to-br from-sky-500/10 to-cyan-500/20 text-sky-600 dark:text-sky-400">
                   <Package className="h-14 w-14 stroke-[1.25]" />
                 </div>
                 <div className="space-y-3 p-4">
