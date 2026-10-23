@@ -1,265 +1,269 @@
 'use client';
 
-import React, { useState } from 'react';
-import { mockItems, mockCategories, mockLocations, mockUsers } from '@/lib/mockData';
-import { Item, ItemStatus } from '@/types';
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { useMemo, useState } from 'react';
+import { AlertTriangle, Download, Eye, Grid2X2, List, MapPin, PackagePlus, Plus, QrCode, Search, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { useAppState, type AssetCategory, type AssetRecord, type AssetUnit } from '@/components/app-state';
 import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import {
-  QrCode,
-  MapPin,
-  AlertTriangle,
-  Download,
-  Eye,
-  Trash2,
-  Search,
-} from 'lucide-react';
-import Link from 'next/link';
+import { QRCodeSVG } from 'qrcode.react';
 
-const ITEM_STATUS_LABELS: Record<string, ItemStatus> = {
-  OPERATIVE: 'Operativo',
-  EN_MANTENCION: 'En Mantención',
-  EN_REPARACION: 'En Reparación',
-  DE_BAJA: 'De Baja',
-  DESAPARECIDO: 'Desaparecido',
+const defaultCategories: AssetCategory[] = ['Equipamiento', '3D', 'Talleres', 'Mobiliario'];
+const defaultPrefixes: Record<string, string> = {
+  Equipamiento: 'EQ-CITT-',
+  '3D': '3D-CITT-',
+  Talleres: 'TA-CITT-',
+  Mobiliario: 'IM-CITT-',
 };
 
+function exportCsv(assets: AssetRecord[]) {
+  const rows = [['Código', 'Activo', 'Categoría', 'Ubicación', 'Disponible', 'Total', 'Unidad', 'Estado'], ...assets.map((asset) => [
+    asset.code, asset.name, asset.category, asset.location, String(asset.available), String(asset.total), asset.unitType, asset.status,
+  ])];
+  const csv = rows.map((row) => row.map((value) => `"${value.replaceAll('"', '""')}"`).join(';')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'inventario_citt.csv';
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function InventarioPage() {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const { role, data, setData } = useAppState();
+  const categories = [...new Set([...defaultCategories, ...data.settings.categories.map((item) => item.name)])];
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<AssetCategory | 'Todos'>('Todos');
+  const [view, setView] = useState<'list' | 'grid'>('list');
+  const [selected, setSelected] = useState<AssetRecord | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [operation, setOperation] = useState<'new' | 'restock'>('new');
+  const [categoryInput, setCategoryInput] = useState<AssetCategory>('Equipamiento');
+  const [unitType, setUnitType] = useState<AssetUnit>('UNID');
+  const [name, setName] = useState('');
+  const [location, setLocation] = useState('');
+  const [description, setDescription] = useState('');
+  const [initialStock, setInitialStock] = useState('1');
+  const [initialTotal, setInitialTotal] = useState('1');
+  const [restockCode, setRestockCode] = useState('');
+  const [restockQuantity, setRestockQuantity] = useState('1');
 
-  // Administrador por defecto
-  const currentUser = mockUsers.data.find((u) => u.name.includes('Paz Constanza Morales')) || mockUsers.data[0];
-  const isAdmin = currentUser?.role === 'ADMINISTRADOR';
+  const filteredAssets = useMemo(() => data.assets.filter((asset) => {
+    const matchesCategory = category === 'Todos' || asset.category === category;
+    const matchesQuery = `${asset.code} ${asset.name} ${asset.location}`.toLowerCase().includes(query.toLowerCase());
+    return matchesCategory && matchesQuery;
+  }), [category, data.assets, query]);
 
-  const items: Item[] = mockItems.data.map((item) => {
-    const status = ITEM_STATUS_LABELS[item.status];
-    if (!status) {
-      throw new Error(`Estado de activo no reconocido: ${item.status}`);
+  const openCreateForm = (mode: 'new' | 'restock') => {
+    setOperation(mode);
+    setName('');
+    setLocation('');
+    setDescription('');
+    setInitialStock('1');
+    setInitialTotal('1');
+    setRestockCode(data.assets[0]?.code ?? '');
+    setRestockQuantity('1');
+    setFormOpen(true);
+  };
+
+  const handleSave = () => {
+    if (role !== 'ADMIN') {
+      toast.error('Solo el administrador puede modificar el inventario.');
+      return;
+    }
+    if (operation === 'restock') {
+      const amount = Number(restockQuantity);
+      const asset = data.assets.find((item) => item.code === restockCode);
+      if (!asset || !Number.isFinite(amount) || amount <= 0 || (asset.unitType === 'UNID' && !Number.isInteger(amount))) {
+        toast.error('Selecciona un activo y una cantidad válida.');
+        return;
+      }
+      setData((current) => ({
+        ...current,
+        assets: current.assets.map((item) => item.code === asset.code
+          ? { ...item, available: Number((item.available + amount).toFixed(3)), total: Number((item.total + amount).toFixed(3)), status: 'Disponible' }
+          : item),
+      }));
+      toast.success(`Stock repuesto para ${asset.code}.`);
+      setFormOpen(false);
+      return;
     }
 
-    return {
-      id: item.id,
-      name: item.name,
-      category_id: item.category.id,
-      location_id: item.location.id,
-      status,
-      stock: 1,
-      unit: 'uds',
-      is_consumable: false,
-      qr_code: item.code,
-    };
-  });
-
-  const getCategoryName = (categoryId: string) => {
-    return mockCategories.data.find((c) => c.id === categoryId)?.name || 'General';
-  };
-
-  const getLocationLabel = (locationId: string) => {
-    if (locationId === 'loc-03') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-          <AlertTriangle className="w-3 h-3 text-amber-600" />
-          Sin Casillero / Sin ubicación fija
-        </span>
-      );
+    const available = Number(initialStock);
+    const total = Number(initialTotal);
+    if (!name.trim() || !location.trim() || !Number.isFinite(available) || !Number.isFinite(total) || available < 0 || total < available ||
+      (unitType === 'UNID' && (!Number.isInteger(available) || !Number.isInteger(total)))) {
+      toast.error('Revisa el nombre, ubicación y cantidades del activo.');
+      return;
     }
-    const loc = mockLocations.data.find((l) => l.id === locationId);
-    return (
-      <span className="inline-flex items-center gap-1 text-slate-600 text-xs">
-        <MapPin className="w-3.5 h-3.5 text-sky-500" />
-        {loc ? loc.name : locationId}
-      </span>
-    );
-  };
-
-  const getStatusBadge = (status: ItemStatus) => {
-    const config: Record<ItemStatus, { label: string; className: string }> = {
-      Operativo: { label: 'Operativo', className: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
-      'En Mantención': { label: 'En Mantención', className: 'bg-sky-50 text-sky-600 border-sky-200' },
-      'En Reparación': { label: 'En Reparación', className: 'bg-orange-50 text-orange-600 border-orange-200' },
-      'De Baja': { label: 'De Baja', className: 'bg-rose-50 text-rose-600 border-rose-200' },
-      Desaparecido: { label: 'Desaparecido', className: 'bg-slate-100 text-slate-700 border-slate-300' },
+    const prefix = data.settings.categories.find((item) => item.name === categoryInput)?.prefix
+      ?? defaultPrefixes[categoryInput]
+      ?? `${categoryInput.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/-+$/g, '')}-CITT-`;
+    const nextNumber = data.assets
+      .filter((asset) => asset.code.startsWith(prefix))
+      .reduce((max, asset) => Math.max(max, Number(asset.code.slice(prefix.length)) || 0), 0) + 1;
+    const code = `${prefix}${String(nextNumber).padStart(3, '0')}`;
+    const asset: AssetRecord = {
+      code,
+      name: name.trim(),
+      category: categoryInput,
+      location: location.trim(),
+      unitType,
+      returnable: unitType === 'UNID',
+      available,
+      total,
+      description: description.trim(),
+      status: available === 0 ? 'Stock Crítico' : 'Disponible',
     };
-    const current = config[status] || config.Operativo;
-    return (
-      <Badge variant="outline" className={`${current.className} text-[10px] font-semibold px-2 py-0.5`}>
-        {current.label}
-      </Badge>
-    );
+    setData((current) => ({ ...current, assets: [asset, ...current.assets] }));
+    toast.success(`Activo registrado con código ${code}.`);
+    setFormOpen(false);
   };
 
-  const resolveItemQR = (item: Item): string => {
-    if (item.qr_code) return item.qr_code;
-    const catName = getCategoryName(item.category_id).toLowerCase();
-    let prefix = 'EQ-CITT-';
-    if (catName.includes('mobiliario')) prefix = 'IM-CITT-';
-    else if (catName.includes('3d') || catName.includes('impresion')) prefix = '3D-CITT-';
-    else if (catName.includes('taller')) prefix = 'TA-CITT-';
-    return `${prefix}${item.id.replace(/\D/g, '').padStart(4, '0')}`;
+  const retireAsset = (asset: AssetRecord) => {
+    if (role !== 'ADMIN') return;
+    setData((current) => ({
+      ...current,
+      assets: current.assets.map((item) => item.code === asset.code ? { ...item, status: 'De Baja', available: 0 } : item),
+    }));
+    setSelected(null);
+    toast.success(`${asset.code} fue dado de baja.`);
   };
 
-  const filteredItems = items.filter((item) => {
-    const search = searchTerm.toLowerCase();
-    const cat = getCategoryName(item.category_id).toLowerCase();
-    return (
-      item.name.toLowerCase().includes(search) ||
-      item.id.toLowerCase().includes(search) ||
-      cat.includes(search)
-    );
-  });
+  const printSelectedQr = () => {
+    if (!selected) return;
+    const qrElement = document.querySelector('#asset-qr svg');
+    const printWindow = window.open('', '_blank', 'width=420,height=520');
+    if (!printWindow) {
+      toast.error('El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes e inténtalo otra vez.');
+      return;
+    }
+    if (!qrElement) {
+      printWindow.close();
+      toast.error('No se pudo generar el código QR del activo.');
+      return;
+    }
+
+    printWindow.document.title = `QR ${selected.code}`;
+    printWindow.document.body.style.cssText = 'margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Arial,sans-serif';
+    const qr = printWindow.document.importNode(qrElement, true);
+    qr.setAttribute('width', '240');
+    qr.setAttribute('height', '240');
+    const label = printWindow.document.createElement('p');
+    label.textContent = `${selected.code} · ${selected.name}`;
+    label.style.cssText = 'max-width:320px;margin:20px;text-align:center;font-weight:700';
+    printWindow.document.body.replaceChildren(qr, label);
+    window.setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+    }, 250);
+  };
+
+  const assetCard = (asset: AssetRecord) => (
+    <article key={asset.code} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-[#111827]">
+      <div className="flex items-start justify-between gap-2">
+        <div><p className="font-mono text-xs font-bold text-sky-600">{asset.code}</p><h3 className="mt-1 font-bold">{asset.name}</h3></div>
+        <Badge variant="outline">{asset.category}</Badge>
+      </div>
+      <div className="mt-4 space-y-2 text-xs text-slate-500">
+        <p className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{asset.location}</p>
+        <p className={asset.available <= 1 ? 'font-semibold text-amber-600' : 'font-semibold text-emerald-600'}>{asset.available} / {asset.total} {asset.unitType === 'KG' ? 'kg' : 'unid.'} disponibles</p>
+        <Badge variant="outline" className={asset.status === 'De Baja' ? 'border-rose-200 text-rose-600' : asset.available === 0 ? 'border-amber-200 text-amber-600' : 'border-emerald-200 text-emerald-600'}>{asset.status}</Badge>
+      </div>
+      <Button variant="outline" size="sm" className="mt-4 w-full" onClick={() => setSelected(asset)}><Eye className="mr-1 h-3.5 w-3.5" /> Ver ficha / QR</Button>
+    </article>
+  );
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row justify-between gap-3">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
-          <Input
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por código, nombre o categoría..."
-            className="pl-8 text-xs h-9 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs h-9 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
-            onClick={() => alert('Exportando inventario_citt.csv...')}
-          >
-            <Download className="w-3.5 h-3.5 mr-1.5" /> Exportar CSV
-          </Button>
-          <Link href="/movimientos">
-            <Button size="sm" className="text-xs h-9 bg-sky-600 hover:bg-sky-700 text-white font-semibold">
-              Nuevo Movimiento
-            </Button>
-          </Link>
+    <div className="space-y-5">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <div><h1 className="text-2xl font-bold">Catálogo de Activos &amp; Generador QR</h1><p className="mt-1 text-sm text-slate-500">Inventario físico, control de stock y etiquetado por código único.</p></div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => exportCsv(filteredAssets)}><Download className="mr-1 h-4 w-4" /> Exportar CSV</Button>
+          <Button variant="outline" disabled={role !== 'ADMIN'} onClick={() => openCreateForm('restock')}><PackagePlus className="mr-1 h-4 w-4" /> Reponer stock</Button>
+          <Button disabled={role !== 'ADMIN'} onClick={() => openCreateForm('new')}><Plus className="mr-1 h-4 w-4" /> Nuevo activo</Button>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-[#111827] rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
-        <Table className="text-xs">
-          <TableHeader className="bg-slate-50 dark:bg-slate-800/50 text-slate-500">
-            <TableRow className="border-b border-slate-100 dark:border-slate-800">
-              <TableHead className="p-3.5 font-semibold">Código QR</TableHead>
-              <TableHead className="p-3.5 font-semibold">Nombre Activo</TableHead>
-              <TableHead className="p-3.5 font-semibold">Categoría</TableHead>
-              <TableHead className="p-3.5 font-semibold">Ubicación</TableHead>
-              <TableHead className="p-3.5 font-semibold">Stock Disponible</TableHead>
-              <TableHead className="p-3.5 font-semibold">Estado</TableHead>
-              <TableHead className="p-3.5 text-right font-semibold">Acciones</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {filteredItems.map((item) => (
-              <TableRow key={item.id} className="hover:bg-slate-50/70 transition-colors">
-                <td className="p-3.5 font-mono text-sky-600 font-semibold">{resolveItemQR(item)}</td>
-                <td className="p-3.5 font-bold text-slate-800 dark:text-white">{item.name}</td>
-                <td className="p-3.5 text-slate-500">{getCategoryName(item.category_id)}</td>
-                <td className="p-3.5">{getLocationLabel(item.location_id)}</td>
-                <td className="p-3.5 font-semibold text-emerald-600">
-                  {item.stock} {item.unit}
-                </td>
-                <td className="p-3.5">{getStatusBadge(item.status)}</td>
-                <td className="p-3.5 text-right">
-                  <div className="flex items-center justify-end gap-3">
-                    <button
-                      onClick={() => {
-                        setSelectedItem(item);
-                        setIsDialogOpen(true);
-                      }}
-                      className="text-slate-400 hover:text-slate-700 transition"
-                      title="Ver Ficha"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                    <Link
-                      href="/movimientos"
-                      className="text-sky-600 font-semibold hover:underline text-xs"
-                    >
-                      Prestar
-                    </Link>
-                  </div>
-                </td>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      {role !== 'ADMIN' && <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">El rol actual puede consultar el inventario, pero no agregar activos ni reponer stock.</p>}
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-md bg-white border-slate-200 rounded-2xl p-6 shadow-2xl">
-          <DialogHeader>
-            <div className="flex justify-between items-center pr-2">
-              <span className="font-mono text-sky-600 text-xs font-bold">
-                {selectedItem && resolveItemQR(selectedItem)}
-              </span>
-              {selectedItem && getStatusBadge(selectedItem.status)}
-            </div>
-            <DialogTitle className="text-base font-bold text-slate-900 mt-1">
-              {selectedItem?.name}
-            </DialogTitle>
-            <DialogDescription className="text-xs text-slate-500">
-              Ficha oficial del equipo CITT Duoc UC
-            </DialogDescription>
-          </DialogHeader>
+      <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-[#111827]">
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por código, nombre o ubicación..." className="pl-9" /></div>
+          <div className="flex gap-2">
+            <Button size="icon" variant={view === 'list' ? 'default' : 'outline'} onClick={() => setView('list')} aria-label="Vista de lista"><List className="h-4 w-4" /></Button>
+            <Button size="icon" variant={view === 'grid' ? 'default' : 'outline'} onClick={() => setView('grid')} aria-label="Vista de tarjetas"><Grid2X2 className="h-4 w-4" /></Button>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(['Todos', ...categories] as const).map((item) => <Button key={item} size="sm" variant={category === item ? 'default' : 'outline'} onClick={() => setCategory(item)}>{item}</Button>)}
+        </div>
+        {view === 'list' ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[850px] text-left text-xs">
+              <thead className="border-b bg-slate-50 text-slate-500 dark:border-slate-800 dark:bg-slate-900/60"><tr>{['Código QR', 'Nombre Activo', 'Categoría', 'Ubicación', 'Stock Disponible', 'Estado', 'Acciones'].map((label) => <th key={label} className="p-3">{label}</th>)}</tr></thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {filteredAssets.map((asset) => (
+                  <tr key={asset.code} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                    <td className="p-3 font-mono font-semibold text-sky-600">{asset.code}</td><td className="p-3 font-semibold">{asset.name}</td><td className="p-3">{asset.category}</td><td className="p-3"><span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5 text-sky-500" />{asset.location}</span></td>
+                    <td className="p-3">{asset.available} {asset.unitType === 'KG' ? 'kg' : 'unid.'} <span className="text-slate-400">/ {asset.total}</span></td>
+                    <td className="p-3"><Badge variant="outline" className={asset.available === 0 ? 'border-rose-200 text-rose-600' : 'border-emerald-200 text-emerald-600'}>{asset.status}</Badge></td>
+                    <td className="p-3"><Button size="sm" variant="ghost" onClick={() => setSelected(asset)} aria-label={`Ver ${asset.name}`}><Eye className="h-4 w-4" /></Button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!filteredAssets.length && <p className="py-8 text-center text-sm text-slate-500">No hay activos que coincidan con la búsqueda.</p>}
+          </div>
+        ) : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">{filteredAssets.map(assetCard)}</div>}
+      </section>
 
-          {selectedItem && (
-            <div className="space-y-4 pt-2">
-              <div className="p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200 flex flex-col items-center">
-                <QrCode className="w-20 h-20 text-slate-800 mb-1" strokeWidth={1.5} />
-                <span className="text-[11px] font-mono font-bold text-slate-600 tracking-wider">
-                  {resolveItemQR(selectedItem)}
-                </span>
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader><DialogTitle>{operation === 'new' ? 'Registrar activo' : 'Reponer stock'}</DialogTitle><DialogDescription>Los cambios se guardan en los datos de demostración de este navegador.</DialogDescription></DialogHeader>
+          <div className="space-y-3">
+            <label className="block text-sm font-medium">Operación<select value={operation} onChange={(event) => setOperation(event.target.value as 'new' | 'restock')} className="mt-1 block w-full rounded-lg border bg-background p-2.5 dark:border-slate-700"><option value="new">Nuevo activo</option><option value="restock">Reponer stock</option></select></label>
+            {operation === 'restock' ? (
+              <>
+                <label className="block text-sm font-medium">Activo<select value={restockCode} onChange={(event) => setRestockCode(event.target.value)} className="mt-1 block w-full rounded-lg border bg-background p-2.5 dark:border-slate-700">{data.assets.map((asset) => <option key={asset.code} value={asset.code}>{asset.code} · {asset.name}</option>)}</select></label>
+                <label className="block text-sm font-medium">Cantidad<Input type="number" min={0.001} step="any" value={restockQuantity} onChange={(event) => setRestockQuantity(event.target.value)} /></label>
+              </>
+            ) : (
+              <>
+                <label className="block text-sm font-medium">Nombre<Input value={name} onChange={(event) => setName(event.target.value)} required /></label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block text-sm font-medium">Categoría<select value={categoryInput} onChange={(event) => setCategoryInput(event.target.value as AssetCategory)} className="mt-1 block w-full rounded-lg border bg-background p-2.5 dark:border-slate-700">{categories.map((item) => <option key={item}>{item}</option>)}</select></label>
+                  <label className="block text-sm font-medium">Unidad<select value={unitType} onChange={(event) => setUnitType(event.target.value as AssetUnit)} className="mt-1 block w-full rounded-lg border bg-background p-2.5 dark:border-slate-700"><option value="UNID">Unidades</option><option value="KG">Kilogramos</option></select></label>
+                </div>
+                <label className="block text-sm font-medium">Ubicación<Input value={location} onChange={(event) => setLocation(event.target.value)} required /></label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block text-sm font-medium">Stock disponible<Input type="number" min={0} step={unitType === 'KG' ? '0.001' : '1'} value={initialStock} onChange={(event) => setInitialStock(event.target.value)} /></label>
+                  <label className="block text-sm font-medium">Stock total<Input type="number" min={0} step={unitType === 'KG' ? '0.001' : '1'} value={initialTotal} onChange={(event) => setInitialTotal(event.target.value)} /></label>
+                </div>
+                <label className="block text-sm font-medium">Descripción<textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={2} className="mt-1 block w-full rounded-lg border bg-background p-2.5 dark:border-slate-700" /></label>
+                <p className="text-xs text-slate-500">Código QR generado al guardar: {data.settings.categories.find((item) => item.name === categoryInput)?.prefix ?? defaultPrefixes[categoryInput] ?? 'CITT-'}###</p>
+              </>
+            )}
+            <div className="flex justify-end gap-2 pt-2"><Button variant="outline" onClick={() => setFormOpen(false)}>Cancelar</Button><Button onClick={handleSave}>Guardar</Button></div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{selected?.name}</DialogTitle><DialogDescription>Ficha de activo CITT · {selected?.code}</DialogDescription></DialogHeader>
+          {selected && (
+            <div className="space-y-4">
+              <div id="asset-qr" className="flex flex-col items-center rounded-xl border border-dashed bg-white p-6 dark:border-slate-700 dark:bg-white">
+                <QRCodeSVG value={selected.code} size={180} level="M" title={`Código QR ${selected.code}`} />
+                <span className="mt-2 font-mono text-sm font-bold text-slate-900">{selected.code}</span>
               </div>
-
-              <div className="grid grid-cols-2 gap-3 text-xs pt-2 border-t border-slate-100">
-                <div>
-                  <span className="text-slate-400 text-[10px] uppercase font-semibold">Categoría</span>
-                  <p className="font-semibold text-slate-700">{getCategoryName(selectedItem.category_id)}</p>
-                </div>
-                <div>
-                  <span className="text-slate-400 text-[10px] uppercase font-semibold">Stock Actual</span>
-                  <p className="font-bold text-sky-600">{selectedItem.stock} {selectedItem.unit}</p>
-                </div>
-                <div className="col-span-2">
-                  <span className="text-slate-400 text-[10px] uppercase font-semibold">Ubicación</span>
-                  <div className="mt-0.5">{getLocationLabel(selectedItem.location_id)}</div>
-                </div>
-              </div>
-
-              {isAdmin && (
-                <div className="pt-3 border-t border-slate-100 flex justify-end">
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="text-xs bg-rose-600 hover:bg-rose-700 text-white"
-                    onClick={() => {
-                      alert(`Activo ${selectedItem.name} dado de baja`);
-                      setIsDialogOpen(false);
-                    }}
-                  >
-                    <Trash2 className="w-3.5 h-3.5 mr-1" /> Dar de baja
-                  </Button>
-                </div>
-              )}
+              <div className="grid grid-cols-2 gap-3 text-sm"><p><span className="text-xs text-slate-500">Categoría</span><strong className="block">{selected.category}</strong></p><p><span className="text-xs text-slate-500">Stock actual</span><strong className="block">{selected.available} / {selected.total} {selected.unitType}</strong></p><p className="col-span-2"><span className="text-xs text-slate-500">Ubicación</span><strong className="block">{selected.location}</strong></p><p className="col-span-2 text-xs text-slate-500">{selected.description}</p></div>
+              {selected.available === 0 && <p className="flex items-center gap-2 text-xs text-amber-600"><AlertTriangle className="h-4 w-4" /> Stock agotado o crítico</p>}
+              <div className="flex justify-end border-t pt-3"><Button variant="outline" size="sm" onClick={printSelectedQr}><QrCode className="mr-1 h-3.5 w-3.5" /> Imprimir QR</Button></div>
+              {role === 'ADMIN' && selected.status !== 'De Baja' && <div className="flex justify-end border-t pt-3"><Button variant="destructive" size="sm" onClick={() => retireAsset(selected)}><Trash2 className="mr-1 h-3.5 w-3.5" /> Dar de baja</Button></div>}
             </div>
           )}
         </DialogContent>

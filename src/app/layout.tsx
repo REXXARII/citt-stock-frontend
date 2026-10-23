@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Montserrat } from "next/font/google";
 import "./globals.css";
 import { LayoutShell } from "@/components/layout-shell";
+import { AppStateProvider } from "@/components/app-state";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "next-themes";
 
@@ -29,7 +30,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-          <LayoutShell>{children}</LayoutShell>
+          <AppStateProvider>
+            <LayoutShell>{children}</LayoutShell>
+          </AppStateProvider>
           <Toaster richColors position="top-right" />
         </ThemeProvider>
       </body>
