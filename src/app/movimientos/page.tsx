@@ -1,7 +1,8 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, PenTool, Scale, ShieldAlert } from 'lucide-react';
+import { CalendarClock, CheckCircle2, Download, FileText, PenTool, PlusCircle, Scale, Search, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppState, type MovementType, type OrderRecord } from '@/components/app-state';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +22,9 @@ export default function MovimientosPage() {
   const [quantity, setQuantity] = useState('1');
   const [returnDate, setReturnDate] = useState('');
   const [notes, setNotes] = useState('');
+  const [registerOpen, setRegisterOpen] = useState(false);
   const [signatureOpen, setSignatureOpen] = useState(false);
+  const [receiptOrder, setReceiptOrder] = useState<OrderRecord | null>(null);
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('Todos');
   const [dateFilter, setDateFilter] = useState('');
@@ -36,12 +39,31 @@ export default function MovimientosPage() {
   });
   const selectedAsset = eligibleAssets.find((asset) => asset.code === assetCode) ?? eligibleAssets[0];
   const visibleOrders = useMemo(() => data.orders.filter((order) => {
-    const movementName = order.movementType === 'DEVOLUCION' ? 'Devolución' : order.movementType === 'PEDIDO' ? 'Pedido' : order.movementType === 'BAJA' ? 'Baja' : 'Préstamo';
-    const queryMatches = `${order.id} ${order.assetName} ${order.requester} ${order.run}`.toLowerCase().includes(query.toLowerCase());
-    const typeMatches = typeFilter === 'Todos' || typeFilter === movementName;
+    const movementName = movementTypeLabel(order.movementType ?? 'PRESTAMO');
+    const queryMatches = `${order.id} ${order.assetCode} ${order.assetName} ${order.requester} ${order.run} ${order.school}`.toLowerCase().includes(query.toLowerCase());
+    const typeMatches = typeFilter === 'Todos los Tipos' || typeFilter === movementName;
     const dateMatches = !dateFilter || order.createdAt.slice(0, 10) === dateFilter;
     return queryMatches && typeMatches && dateMatches;
   }), [data.orders, dateFilter, query, typeFilter]);
+  const today = dateKey(new Date());
+  const movementsToday = data.orders.filter((order) =>
+    dateKey(new Date(order.createdAt)) === today,
+  ).length;
+  const loanedByAsset = data.orders.reduce<Record<string, number>>((totals, order) => {
+    if (order.status !== 'Recibido') return totals;
+    if (order.movementType === 'PRESTAMO') totals[order.assetCode] = (totals[order.assetCode] ?? 0) + order.quantity;
+    if (order.movementType === 'DEVOLUCION') totals[order.assetCode] = (totals[order.assetCode] ?? 0) - order.quantity;
+    return totals;
+  }, {});
+  const loanedAssets = Object.values(loanedByAsset).filter((quantity) => quantity > 0).length;
+  const pendingReturns = data.orders.filter((order) =>
+    order.movementType === 'PRESTAMO' &&
+    order.status === 'Recibido' &&
+    order.returnDate &&
+    order.returnDate < today &&
+    (loanedByAsset[order.assetCode] ?? 0) > 0,
+  ).length;
+  const retiredMovements = data.orders.filter((order) => order.movementType === 'BAJA').length;
 
   useEffect(() => {
     if (!signatureOpen || !canvasRef.current) return;
@@ -98,6 +120,7 @@ export default function MovimientosPage() {
       toast.error('El solicitante está bloqueado por morosidad.');
       return;
     }
+    setRegisterOpen(false);
     setSignatureOpen(true);
   };
 
@@ -122,6 +145,7 @@ export default function MovimientosPage() {
     }, 0) + 1;
     const id = `TRX-${String(nextSequence).padStart(5, '0')}`;
     const now = new Date().toISOString();
+    const signatureData = canvas.toDataURL('image/png');
     const order: OrderRecord = {
       id,
       assetCode: selectedAsset.code,
@@ -137,6 +161,7 @@ export default function MovimientosPage() {
       movementType,
       createdAt: now,
       returnDate,
+      signatureData,
       ownerRole: role,
       stockDeducted: movementType === 'PRESTAMO' || movementType === 'PEDIDO',
       history: [{ action: `${movementTypeLabel(movementType)} registrada con firma digital`, actor: currentUser.name, date: now }],
@@ -154,6 +179,7 @@ export default function MovimientosPage() {
     }));
     context.clearRect(0, 0, canvas.width, canvas.height);
     setSignatureOpen(false);
+    setRegisterOpen(false);
     setRequester('');
     setRun('');
     setNotes('');
@@ -163,8 +189,8 @@ export default function MovimientosPage() {
   };
 
   const exportMovements = () => {
-    const rows = [['Folio', 'Fecha', 'Activo', 'Cantidad', 'Solicitante', 'RUN', 'Escuela', 'Tipo', 'Estado'], ...visibleOrders.map((order) => [
-      order.id, order.createdAt, order.assetName, `${order.quantity} ${order.unit}`, order.requester, order.run, order.school, movementTypeLabel(order.movementType ?? 'PRESTAMO'), order.status,
+    const rows = [['Folio', 'Fecha', 'Código', 'Activo', 'Cantidad', 'Solicitante', 'RUN', 'Escuela', 'Tipo', 'Retorno', 'Estado', 'Firma'], ...visibleOrders.map((order) => [
+      order.id, order.createdAt, order.assetCode, order.assetName, `${order.quantity} ${order.unit}`, order.requester, order.run, order.school, movementTypeLabel(order.movementType ?? 'PRESTAMO'), order.returnDate, order.status, order.signatureData ? 'Validada' : 'Pendiente',
     ])];
     const csv = rows.map((row) => row.map((value) => `"${value.replaceAll('"', '""')}"`).join(';')).join('\r\n');
     const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
@@ -178,61 +204,121 @@ export default function MovimientosPage() {
   return (
     <div className="space-y-5">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <div><h1 className="text-2xl font-bold">Movimientos y Préstamos</h1><p className="mt-1 text-sm text-slate-500">Control de asignaciones, devoluciones, pedidos y firma digital de compromiso.</p></div>
-        <Button variant="outline" onClick={exportMovements}><Download className="mr-1 h-4 w-4" /> Exportar historial</Button>
+        <div><h1 className="text-2xl font-bold">Movimientos y Préstamos</h1><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Control de asignaciones, devoluciones, pedidos y firma digital de compromiso.</p></div>
+        <div className="grid shrink-0 grid-cols-2 items-center gap-2.5">
+          <Button size="sm" variant="outline" onClick={exportMovements}><Download className="mr-1 h-4 w-4" /> Exportar Log</Button>
+          {role !== 'GLOBAL' && <Button size="sm" onClick={() => setRegisterOpen(true)}><PlusCircle className="mr-1 h-4 w-4" /> Registrar Movimiento</Button>}
+        </div>
       </div>
 
-      {role === 'GLOBAL' ? (
-        <section className="rounded-2xl border border-sky-200 bg-sky-50 p-5 text-sm text-sky-800 dark:bg-sky-950/20 dark:text-sky-300">
-          El rol Alumno Global solo puede consultar y solicitar activos desde el catálogo de <a href="/pedidos" className="font-bold underline">Pedidos / Catálogo</a>.
-        </section>
-      ) : (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#111827]">
-          <h2 className="font-bold">Registrar Movimiento / Trazabilidad</h2>
-          <p className="mt-1 text-xs text-slate-500">Completa los datos y valida la entrega con firma presencial.</p>
-          <form onSubmit={prepareSignature} className="mt-4 space-y-4">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <label className="block text-sm font-medium">Tipo de operación<select value={movementType} onChange={(event) => setMovementType(event.target.value as MovementType)} className="mt-1 block w-full rounded-lg border bg-background p-2.5 text-sm dark:border-slate-700"><option value="PRESTAMO">Préstamo</option><option value="DEVOLUCION">Devolución</option><option value="PEDIDO">Pedido (Consumible)</option>{role === 'ADMIN' && <option value="BAJA">Baja definitiva</option>}</select></label>
-              <label className="block text-sm font-medium">Escuela solicitante<select required value={school} onChange={(event) => setSchool(event.target.value)} className="mt-1 block w-full rounded-lg border bg-background p-2.5 text-sm dark:border-slate-700"><option value="">Selecciona escuela...</option>{schools.map((item) => <option key={item}>{item}</option>)}</select></label>
-              <label className="block text-sm font-medium">Activo o insumo<select required value={selectedAsset?.code ?? ''} onChange={(event) => setAssetCode(event.target.value)} className="mt-1 block w-full rounded-lg border bg-background p-2.5 text-sm dark:border-slate-700">{eligibleAssets.map((item) => <option key={item.code} value={item.code}>{item.code} · {item.name} ({item.available} {item.unitType === 'KG' ? 'kg' : 'unid.'})</option>)}</select></label>
-              <label className="block text-sm font-medium">Nombre del solicitante<Input required value={requester} onChange={(event) => setRequester(event.target.value)} placeholder="Nombre completo" /></label>
-              <label className="block text-sm font-medium">RUN del solicitante<Input value={run} onChange={(event) => setRun(event.target.value)} placeholder="20.123.456-K" pattern="\d{1,2}\.\d{3}\.\d{3}-[\dkK]" /></label>
-              <label className="block text-sm font-medium">Cantidad ({selectedAsset?.unitType === 'KG' ? 'gramos' : 'unidades'})<Input required type="number" min={selectedAsset?.unitType === 'KG' ? 1 : 1} step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} />{selectedAsset?.unitType === 'KG' && <span className="mt-1 flex items-center gap-1 text-xs text-sky-600"><Scale className="h-3.5 w-3.5" />Se descontarán {(Number(quantity || 0) / 1000).toFixed(3)} kg del stock.</span>}</label>
-              {movementType === 'PRESTAMO' && <label className="block text-sm font-medium">Fecha límite / retorno<Input required type="date" min={new Date().toISOString().slice(0, 10)} value={returnDate} onChange={(event) => setReturnDate(event.target.value)} /></label>}
-              <label className="block text-sm font-medium md:col-span-2">Motivo / Taller o asignatura<textarea required minLength={3} maxLength={300} rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} className="mt-1 block w-full rounded-lg border bg-background p-2.5 text-sm dark:border-slate-700" /></label>
-            </div>
-            {data.members.some((member) => member.run.toLowerCase() === run.trim().toLowerCase() && member.blocked) && <p className="flex items-center gap-2 rounded-lg bg-rose-50 p-3 text-xs text-rose-700"><ShieldAlert className="h-4 w-4" /> Este solicitante tiene la cuenta bloqueada por morosidad.</p>}
-            <Button type="submit" className="w-full"><PenTool className="mr-1 h-4 w-4" /> Siguiente: Firma Presencial</Button>
-          </form>
-        </section>
-      )}
+      <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[
+          { label: 'Movimientos Hoy', value: movementsToday, color: 'text-slate-900 dark:text-white' },
+          { label: 'Activos Prestados', value: loanedAssets.toLocaleString('es-CL', { maximumFractionDigits: 3 }), color: 'text-sky-500' },
+          { label: 'Devoluciones Pendientes', value: pendingReturns, color: 'text-amber-500' },
+          { label: 'Bajas / Retiros', value: retiredMovements, color: 'text-rose-500' },
+        ].map((stat) => (
+          <article key={stat.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800/90 dark:bg-[#111827]">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{stat.label}</p>
+            <p className={`mt-1 text-2xl font-extrabold ${stat.color}`}>{stat.value}</p>
+          </article>
+        ))}
+      </section>
 
-      <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#111827]">
-        <div><h2 className="font-bold">Historial de Movimientos</h2><p className="mt-1 text-xs text-slate-500">Pedidos, entregas y devoluciones registrados en este navegador.</p></div>
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-3"><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar folio, RUN, solicitante o activo..." /><select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="rounded-lg border bg-background px-3 py-2 text-sm dark:border-slate-700">{['Todos', 'Préstamo', 'Devolución', 'Pedido', 'Baja'].map((item) => <option key={item}>{item}</option>)}</select><Input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} aria-label="Filtrar por fecha" /></div>
+      <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800/90 dark:bg-[#111827]">
+        <div className="flex flex-col gap-3 md:flex-row">
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por RUN, Alumno, Equipo o ID transacción..." className="h-11 pl-10 text-xs" />
+          </div>
+          <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} aria-label="Filtrar por tipo de movimiento" className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-3.5 text-xs text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+            {['Todos los Tipos', 'Préstamo', 'Devolución', 'Pedido', 'Baja'].map((item) => <option key={item}>{item}</option>)}
+          </select>
+          <Input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} aria-label="Filtrar por fecha" className="h-11 w-full text-xs md:w-auto" />
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[850px] text-left text-xs">
-            <thead className="border-b bg-slate-50 text-slate-500 dark:border-slate-800 dark:bg-slate-900/60"><tr>{['Folio / Fecha', 'Activo', 'Cantidad', 'Solicitante', 'Tipo', 'Retorno', 'Estado'].map((label) => <th key={label} className="p-3">{label}</th>)}</tr></thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {visibleOrders.map((order) => <tr key={order.id}>
-                <td className="p-3"><strong className="font-mono text-sky-600">{order.id}</strong><span className="block text-[10px] text-slate-400">{new Date(order.createdAt).toLocaleString('es-CL')}</span></td><td className="p-3 font-semibold">{order.assetName}</td><td className="p-3">{order.quantity} {order.unit}</td><td className="p-3">{order.requester}<span className="block text-[10px] text-slate-400">{order.run} · {order.school}</span></td><td className="p-3"><Badge variant="outline">{movementTypeLabel(order.movementType ?? 'PRESTAMO')}</Badge></td><td className="p-3">{order.returnDate || 'No aplica'}</td><td className="p-3">{order.status}</td>
-              </tr>)}
+          <table className="w-full min-w-[1050px] text-left text-xs">
+            <thead className="border-b border-slate-200 text-slate-400 dark:border-slate-800">
+              <tr>{['Folio / Fecha', 'Activo seleccionado', 'Cantidad', 'Responsable / Solicitante', 'Tipo de movimiento', 'Fecha límite / Retorno', 'Firma / Recibo'].map((label) => <th key={label} className="px-2 py-3 font-semibold uppercase">{label}</th>)}</tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
+              {visibleOrders.map((order) => {
+                const movementLabel = movementTypeLabel(order.movementType ?? 'PRESTAMO');
+                const movementColor = order.movementType === 'BAJA'
+                  ? 'bg-rose-500/15 text-rose-500'
+                  : order.movementType === 'PEDIDO' || order.movementType === 'DEVOLUCION'
+                    ? 'bg-sky-500/15 text-sky-500'
+                    : 'bg-amber-500/15 text-amber-500';
+                return (
+                  <tr key={order.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30">
+                    <td className="px-2 py-3.5">
+                      <p className="font-mono font-bold text-sky-600">#{order.id}</p>
+                      <p className="mt-1 text-[11px] text-slate-400">{new Date(order.createdAt).toLocaleString('es-CL')}</p>
+                    </td>
+                    <td className="px-2 py-3.5">
+                      <p className="font-semibold">{order.assetName}</p>
+                      <p className="mt-1 font-mono text-[10px] text-slate-400">{order.assetCode}</p>
+                    </td>
+                    <td className="px-2 py-3.5 font-bold">
+                      {order.quantity} {order.unit}
+                      {order.unit === 'g' && <span className="block text-[10px] font-normal text-slate-400">(-{(order.quantity / 1000).toFixed(3)} kg)</span>}
+                    </td>
+                    <td className="px-2 py-3.5">
+                      <p className="font-medium">{order.requester} ({order.run || 'RUN no registrado'})</p>
+                      <p className="mt-1 text-[11px] text-slate-400">{order.ownerRole === 'ADMIN' ? 'Administrador' : order.ownerRole === 'AYUDANTE' ? 'Alumno Ayudante' : 'Usuario Global'} · Esc. {order.school}</p>
+                    </td>
+                    <td className="px-2 py-3.5"><Badge variant="outline" className={`rounded-full border-0 px-2.5 ${movementColor}`}>{movementLabel}</Badge></td>
+                    <td className="px-2 py-3.5 text-slate-500">
+                      {order.movementType === 'BAJA' ? 'Retiro definitivo' : order.returnDate ? new Date(`${order.returnDate}T00:00:00`).toLocaleDateString('es-CL') : 'No aplica (Consumible)'}
+                    </td>
+                    <td className="px-2 py-3.5 text-right">
+                      {order.signatureData ? (
+                        <Button size="sm" variant="ghost" className="text-emerald-600" onClick={() => setReceiptOrder(order)}><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Ver firma</Button>
+                      ) : order.movementType === 'BAJA' ? (
+                        <span className="font-semibold text-rose-400">Acta de Baja</span>
+                      ) : (
+                        <span className="text-slate-400">Sin firma</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
-          {!visibleOrders.length && <p className="py-8 text-center text-sm text-slate-500">Todavía no hay movimientos para este filtro.</p>}
+          {!visibleOrders.length && <div className="py-10 text-center text-sm text-slate-500"><CalendarClock className="mx-auto mb-2 h-6 w-6" />Todavía no hay movimientos para este filtro.</div>}
         </div>
       </section>
 
+      <Dialog open={registerOpen} onOpenChange={setRegisterOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Registrar Movimiento / Trazabilidad</DialogTitle><DialogDescription>Registra la asignación, devolución o retiro del activo y valida con firma digital.</DialogDescription></DialogHeader>
+          <form onSubmit={prepareSignature} className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <label className="block text-xs font-semibold">Tipo de operación<select value={movementType} onChange={(event) => setMovementType(event.target.value as MovementType)} className="mt-1 block h-11 w-full rounded-xl border bg-slate-50 px-3 text-sm dark:border-slate-700 dark:bg-slate-900"><option value="PRESTAMO">Préstamo (Exige Fecha de Retorno)</option><option value="PEDIDO">Pedido / Consumible (Sin Fecha de Retorno)</option><option value="DEVOLUCION">Devolución</option>{role === 'ADMIN' && <option value="BAJA">Baja (Activo sin reparación)</option>}</select></label>
+              <label className="block text-xs font-semibold">Activo / Equipo<select required value={selectedAsset?.code ?? ''} onChange={(event) => setAssetCode(event.target.value)} className="mt-1 block h-11 w-full rounded-xl border bg-slate-50 px-3 text-sm dark:border-slate-700 dark:bg-slate-900">{eligibleAssets.map((item) => <option key={item.code} value={item.code}>{item.code} · {item.name} ({item.available} {item.unitType === 'KG' ? 'kg' : 'unid.'})</option>)}</select></label>
+              <label className="block text-xs font-semibold">Cantidad ({selectedAsset?.unitType === 'KG' ? 'gramos' : 'unidades'})<Input required type="number" min={1} step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} />{selectedAsset?.unitType === 'KG' && <span className="mt-1 flex items-center gap-1 text-[11px] text-sky-600"><Scale className="h-3.5 w-3.5" />Se descontarán {(Number(quantity || 0) / 1000).toFixed(3)} kg del stock.</span>}</label>
+              <label className="block text-xs font-semibold">Escuela solicitante<select required value={school} onChange={(event) => setSchool(event.target.value)} className="mt-1 block h-11 w-full rounded-xl border bg-slate-50 px-3 text-sm dark:border-slate-700 dark:bg-slate-900"><option value="">Selecciona escuela...</option>{schools.map((item) => <option key={item}>{item}</option>)}</select></label>
+              {movementType === 'PRESTAMO' && <label className="block text-xs font-semibold">Fecha límite de retorno<Input required type="date" min={new Date().toISOString().slice(0, 10)} value={returnDate} onChange={(event) => setReturnDate(event.target.value)} /></label>}
+              <label className="block text-xs font-semibold">Responsable / Solicitante<Input required value={requester} onChange={(event) => setRequester(event.target.value)} placeholder="Nombre completo" /></label>
+              <label className="block text-xs font-semibold">RUN del solicitante<Input value={run} onChange={(event) => setRun(event.target.value)} placeholder="20.123.456-K" pattern="\d{1,2}\.\d{3}\.\d{3}-[\dkK]" /></label>
+              <label className="block text-xs font-semibold md:col-span-2">Observaciones / Motivo<textarea required minLength={3} maxLength={300} rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} className="mt-1 block w-full rounded-xl border bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-900" /></label>
+            </div>
+            {data.members.some((member) => member.run.toLowerCase() === run.trim().toLowerCase() && member.blocked) && <p className="flex items-center gap-2 rounded-lg bg-rose-50 p-3 text-xs text-rose-700"><ShieldAlert className="h-4 w-4" /> Este solicitante tiene la cuenta bloqueada por morosidad.</p>}
+            <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="outline" onClick={() => setRegisterOpen(false)}>Cancelar</Button><Button type="submit"><PenTool className="mr-1 h-4 w-4" /> Siguiente: Firma</Button></div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={signatureOpen} onOpenChange={setSignatureOpen}>
         <DialogContent className="sm:max-w-lg">
-          <DialogHeader><DialogTitle>Firma Digital de Compromiso</DialogTitle><DialogDescription>Firma en el recuadro antes de confirmar la entrega.</DialogDescription></DialogHeader>
-          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-2 dark:border-slate-700 dark:bg-slate-900">
+          <DialogHeader><DialogTitle>Firma Digital de Compromiso</DialogTitle><DialogDescription>Firma en el recuadro para respaldar la entrega del activo.</DialogDescription></DialogHeader>
+          <div className="overflow-hidden rounded-2xl border-2 border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900">
             <canvas
               ref={canvasRef}
-              width={640}
-              height={220}
+              width={390}
+              height={190}
               aria-label="Área para firma"
-              className="h-48 w-full touch-none cursor-crosshair rounded-lg bg-white dark:bg-slate-800"
+              className="h-48 w-full touch-none cursor-crosshair bg-white dark:bg-slate-800"
               onPointerDown={(event) => {
                 const canvas = canvasRef.current;
                 const context = canvas?.getContext('2d');
@@ -257,7 +343,27 @@ export default function MovimientosPage() {
               onPointerCancel={() => { drawing.current = false; }}
             />
           </div>
-          <div className="flex justify-between gap-2"><Button variant="outline" onClick={() => { const canvas = canvasRef.current; const context = canvas?.getContext('2d'); if (canvas && context) context.clearRect(0, 0, canvas.width, canvas.height); hasSignature.current = false; }}>Limpiar firma</Button><div className="flex gap-2"><Button variant="outline" onClick={() => setSignatureOpen(false)}>Cancelar</Button><Button onClick={saveMovement}>Confirmar y guardar</Button></div></div>
+          <div className="flex justify-between gap-2"><Button variant="outline" onClick={() => { const canvas = canvasRef.current; const context = canvas?.getContext('2d'); if (canvas && context) context.clearRect(0, 0, canvas.width, canvas.height); hasSignature.current = false; }}>Limpiar</Button><div className="flex gap-2"><Button variant="outline" onClick={() => { setSignatureOpen(false); setRegisterOpen(true); }}>Volver</Button><Button onClick={saveMovement}>Guardar Firma</Button></div></div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(receiptOrder)} onOpenChange={(open) => { if (!open) setReceiptOrder(null); }}>
+        <DialogContent className="sm:max-w-md">
+          {receiptOrder && (
+            <>
+              <DialogHeader><DialogTitle>Comprobante de Movimiento</DialogTitle><DialogDescription>Firma digital asociada a {receiptOrder.id}.</DialogDescription></DialogHeader>
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs dark:border-slate-700 dark:bg-slate-900">
+                <div className="flex items-start justify-between gap-3"><div><p className="font-mono font-bold text-sky-600">{receiptOrder.id}</p><p className="mt-1 font-bold">{receiptOrder.assetName}</p></div><Badge variant="outline">{movementTypeLabel(receiptOrder.movementType ?? 'PRESTAMO')}</Badge></div>
+                <p className="text-slate-500">{receiptOrder.requester} · {receiptOrder.run}</p>
+                <p className="text-slate-500">{new Date(receiptOrder.createdAt).toLocaleString('es-CL')}</p>
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700">
+                  {receiptOrder.signatureData && <Image src={receiptOrder.signatureData} alt={`Firma de ${receiptOrder.requester}`} width={390} height={128} unoptimized className="h-32 w-full object-contain" />}
+                </div>
+                <p className="flex items-center gap-1.5 font-semibold text-emerald-600"><CheckCircle2 className="h-4 w-4" /> Firma guardada y validada</p>
+              </div>
+              <Button variant="outline" onClick={() => setReceiptOrder(null)}><FileText className="mr-1 h-4 w-4" /> Cerrar comprobante</Button>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>
@@ -266,4 +372,11 @@ export default function MovimientosPage() {
 
 function movementTypeLabel(type: MovementType) {
   return { PRESTAMO: 'Préstamo', DEVOLUCION: 'Devolución', PEDIDO: 'Pedido', BAJA: 'Baja' }[type];
+}
+
+function dateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }

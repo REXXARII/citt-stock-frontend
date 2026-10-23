@@ -1,9 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { CalendarClock, Package, Plus, Search, ShoppingBag, Trash2 } from 'lucide-react';
+import { CalendarClock, Plus, Search, ShoppingBag, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppState, type AssetCategory, type OrderRecord } from '@/components/app-state';
+import { AssetImage } from '@/components/asset-image';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -31,6 +32,10 @@ interface CartLine {
   quantity: number;
 }
 
+function maxRequestQuantity(available: number, unitType: 'UNID' | 'KG') {
+  return unitType === 'KG' ? Math.round(available * 1000) : Math.floor(available);
+}
+
 export default function PedidosPage() {
   const { role, currentUser, data, setData } = useAppState();
   const [query, setQuery] = useState('');
@@ -53,15 +58,23 @@ export default function PedidosPage() {
 
   const addToCart = (code: string) => {
     const asset = data.assets.find((item) => item.code === code);
-    if (!asset || asset.available <= 0) {
-      toast.error('Este activo no tiene stock disponible.');
+    if (!asset) {
+      toast.error('No se encontró el activo seleccionado.');
+      return;
+    }
+    const maximum = maxRequestQuantity(asset.available, asset.unitType);
+    if (maximum < 1) {
+      toast.error(asset.available > 0
+        ? 'El stock disponible es menor a la cantidad mínima de 1 gramo.'
+        : 'Este activo no tiene stock disponible.');
       return;
     }
     setCart((current) => {
       const line = current.find((item) => item.code === code);
-      if (!line) return [...current, { code, quantity: 1 }];
+      const increment = asset.unitType === 'KG' ? 50 : 1;
+      if (!line) return [...current, { code, quantity: Math.min(increment, maximum) }];
       return current.map((item) => item.code === code
-        ? { ...item, quantity: Math.min(item.quantity + 1, asset.unitType === 'KG' ? Math.floor(asset.available * 1000) : asset.available) }
+        ? { ...item, quantity: Math.min(item.quantity + increment, maximum) }
         : item);
     });
     toast.success('Activo agregado a tu solicitud.');
@@ -82,10 +95,15 @@ export default function PedidosPage() {
     }
     const insufficient = cart.find(({ code, quantity }) => {
       const asset = data.assets.find((item) => item.code === code);
-      return !asset || (asset.unitType === 'KG' ? quantity / 1000 : quantity) > asset.available;
+      return !asset ||
+        !Number.isInteger(quantity) ||
+        quantity < 1 ||
+        maxRequestQuantity(asset.available, asset.unitType) < quantity;
     });
     if (insufficient) {
-      toast.error('La cantidad solicitada supera el stock disponible.');
+      toast.error(insufficient.quantity < 1 || !Number.isInteger(insufficient.quantity)
+        ? 'Ingresa una cantidad entera mayor que cero.'
+        : 'La cantidad solicitada supera el stock disponible.');
       return;
     }
 
@@ -167,9 +185,7 @@ export default function PedidosPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {filteredAssets.map((asset) => (
               <article key={asset.code} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#111827]">
-                <div className="flex h-36 items-center justify-center bg-linear-to-br from-sky-500/10 to-cyan-500/20 text-sky-600 dark:text-sky-400">
-                  <Package className="h-14 w-14 stroke-[1.25]" />
-                </div>
+                 <AssetImage src={asset.image} alt={`Imagen de ${asset.name}`} className="h-36 w-full bg-linear-to-br from-sky-500/10 to-cyan-500/20" />
                 <div className="space-y-3 p-4">
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -186,8 +202,8 @@ export default function PedidosPage() {
                     <span className="text-slate-400">{asset.location}</span>
                   </div>
                   {asset.returnable && <p className="flex items-center gap-1 text-[11px] text-slate-500"><CalendarClock className="h-3.5 w-3.5" /> Préstamo con devolución</p>}
-                  <Button className="w-full" disabled={asset.available <= 0} onClick={() => addToCart(asset.code)}>
-                    <Plus className="mr-1 h-4 w-4" /> {asset.available > 0 ? 'Agregar a solicitud' : 'Sin stock'}
+                  <Button className="w-full" disabled={maxRequestQuantity(asset.available, asset.unitType) < 1} onClick={() => addToCart(asset.code)}>
+                    <Plus className="mr-1 h-4 w-4" /> {asset.available > 0 ? asset.unitType === 'KG' && maxRequestQuantity(asset.available, asset.unitType) < 1 ? 'Menos de 1 g disponible' : 'Agregar a solicitud' : 'Sin stock'}
                   </Button>
                 </div>
               </article>
@@ -224,14 +240,26 @@ export default function PedidosPage() {
           </DialogHeader>
           <div className="space-y-3">
             {!cart.length && <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500 dark:bg-slate-900">Tu solicitud está vacía. Agrega activos desde el catálogo.</p>}
+            {cart.some((line) => data.assets.find((asset) => asset.code === line.code)?.unitType === 'KG') && (
+              <p className="rounded-xl bg-sky-500/10 p-3 text-xs text-sky-700 dark:text-sky-300">
+                Los insumos por peso se solicitan en gramos. El inventario se mantiene en kilogramos y se descuenta al aprobar la entrega.
+              </p>
+            )}
             {cart.map((line) => {
               const asset = data.assets.find((item) => item.code === line.code);
               if (!asset) return null;
-              const max = asset.unitType === 'KG' ? Math.floor(asset.available * 1000) : asset.available;
+              const max = maxRequestQuantity(asset.available, asset.unitType);
+              const isConsumableByWeight = asset.unitType === 'KG';
               return (
                 <div key={line.code} className="flex items-center gap-3 rounded-xl border p-3 dark:border-slate-700">
-                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{asset.name}</p><p className="text-xs text-slate-500">{asset.code} · Disponible: {asset.available} {asset.unitType === 'KG' ? 'kg' : 'unid.'}</p></div>
-                  <Input className="w-24" type="number" min={asset.unitType === 'KG' ? 1 : 1} max={max} value={line.quantity} onChange={(event) => updateCartQuantity(line.code, Number(event.target.value))} aria-label={`Cantidad de ${asset.name}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{asset.name}</p>
+                    <p className="text-xs text-slate-500">{asset.code} · Disponible: {asset.available} {isConsumableByWeight ? 'kg' : 'unid.'}{isConsumableByWeight && ` · ${max.toLocaleString('es-CL')} g para solicitar`}</p>
+                  </div>
+                  <label className="shrink-0 text-[11px] font-semibold text-slate-500">
+                    Cantidad ({isConsumableByWeight ? 'g' : 'unid.'})
+                    <Input className="mt-1 w-24" type="number" min={1} max={max} step={1} value={line.quantity} onChange={(event) => updateCartQuantity(line.code, Number(event.target.value))} aria-label={`Cantidad de ${asset.name} (${isConsumableByWeight ? 'gramos' : 'unidades'})`} />
+                  </label>
                   <Button variant="ghost" size="icon" aria-label={`Quitar ${asset.name}`} onClick={() => setCart((items) => items.filter((item) => item.code !== line.code))}><Trash2 className="h-4 w-4 text-rose-500" /></Button>
                 </div>
               );

@@ -4,11 +4,13 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from '@/components/theme-provider';
+import { AuthScreen } from '@/components/auth-screen';
 import {
   Bell,
   Box,
   ClipboardCheck,
   LayoutGrid,
+  LogOut,
   Menu,
   Moon,
   Package,
@@ -20,16 +22,17 @@ import {
   Users,
   Wrench,
 } from 'lucide-react';
-import { useAppState, type SessionRole } from '@/components/app-state';
+import { toast } from 'sonner';
+import { useAppState, type SessionProfile, type SessionRole } from '@/components/app-state';
 
 const navigation = [
   { label: 'Dashboard / Panel', href: '/', icon: LayoutGrid, role: 'staff' },
   { label: 'Catálogo de Activos', href: '/inventario', icon: Package, role: 'staff' },
+  { label: 'Movimientos / Historial', href: '/movimientos', icon: Repeat, role: 'staff' },
+  { label: 'Mantenimiento (OT)', href: '/mantenimiento', icon: Wrench, role: 'staff' },
   { label: 'Pedidos / Catálogo', href: '/pedidos', icon: ShoppingBag, role: 'all' },
   { label: 'Gestión de Pedidos', href: '/gestion-pedidos', icon: ClipboardCheck, role: 'staff' },
-  { label: 'Movimientos / Historial', href: '/movimientos', icon: Repeat, role: 'staff' },
   { label: 'Miembros & Solicitantes', href: '/miembros', icon: Users, role: 'staff' },
-  { label: 'Mantenimiento (OT)', href: '/mantenimiento', icon: Wrench, role: 'staff' },
   { label: 'Alertas', href: '/alertas', icon: Bell, role: 'staff' },
   { label: 'Reportes & Analítica', href: '/reportes', icon: PieChart, role: 'staff' },
   { label: 'Parametrización', href: '/configuracion', icon: Settings, role: 'admin' },
@@ -41,17 +44,58 @@ const roleLabels: Record<SessionRole, string> = {
   GLOBAL: 'Alumno Global',
 };
 
+const authStorageKey = 'citt-stock-frontend-session';
+
+function isStoredSession(value: unknown): value is { profile: SessionProfile; role: SessionRole } {
+  if (!value || typeof value !== 'object') return false;
+  const session = value as { profile?: unknown; role?: unknown };
+  if (!session.profile || typeof session.profile !== 'object') return false;
+  if (!['ADMIN', 'AYUDANTE', 'GLOBAL'].includes(String(session.role))) return false;
+  const profile = session.profile as Record<string, unknown>;
+  return ['name', 'email', 'run', 'role', 'school'].every((field) => typeof profile[field] === 'string');
+}
+
 export function LayoutShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
-  const { role, setRole, currentUser, data } = useAppState();
+  const { role, setRole, currentUser, setSessionUser, data, setData } = useAppState();
+  const [authenticated, setAuthenticated] = useState(false);
+  const [authOpen, setAuthOpen] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
+    try {
+      const savedSession = window.sessionStorage.getItem(authStorageKey);
+      if (savedSession) {
+        const parsed: unknown = JSON.parse(savedSession);
+        if (!isStoredSession(parsed)) throw new Error('La sesión guardada no tiene un formato válido.');
+        setSessionUser(parsed.profile);
+        setRole(parsed.role);
+        // Restore browser-owned session state after the client has mounted.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setAuthenticated(true);
+        setAuthOpen(false);
+      }
+    } catch (error) {
+      console.error('No se pudo restaurar la sesión de CITT Stock.', error);
+      try {
+        window.sessionStorage.removeItem(authStorageKey);
+      } catch (storageError) {
+        console.error('No se pudo limpiar la sesión inválida de CITT Stock.', storageError);
+      }
+      toast.error('No se pudo recuperar tu sesión. Inicia sesión nuevamente.');
+    } finally {
+      setAuthReady(true);
+    }
+  }, [setRole, setSessionUser]);
+
+  useEffect(() => {
+    if (!authReady || !authenticated) return;
     if (role === 'GLOBAL' && pathname !== '/pedidos') router.replace('/pedidos');
     if (role !== 'ADMIN' && pathname === '/configuracion') router.replace('/');
-  }, [pathname, role, router]);
+  }, [authReady, authenticated, pathname, role, router]);
 
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
   const visibleNavigation = navigation.filter(({ role: access }) =>
@@ -68,8 +112,50 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
     .join('')
     .toUpperCase();
 
+  const authenticate = (profile: SessionProfile, nextRole: SessionRole) => {
+    try {
+      window.sessionStorage.setItem(authStorageKey, JSON.stringify({ profile, role: nextRole }));
+      setSessionUser(profile);
+      setRole(nextRole);
+      setAuthenticated(true);
+      setAuthOpen(false);
+      router.replace(nextRole === 'GLOBAL' ? '/pedidos' : '/');
+    } catch (error) {
+      console.error('No se pudo guardar la sesión de CITT Stock.', error);
+      toast.error('No se pudo guardar la sesión en esta pestaña.');
+    }
+  };
+
+  const registerProfile = (profile: SessionProfile) => {
+    setData((current) => ({
+      ...current,
+      members: [{
+        id: `M-REG-${Date.now()}`,
+        ...profile,
+        blocked: false,
+        loans: 0,
+        overdueDays: 0,
+      }, ...current.members],
+    }));
+  };
+
+  const logout = () => {
+    try {
+      window.sessionStorage.removeItem(authStorageKey);
+    } catch (error) {
+      console.error('No se pudo borrar la sesión de CITT Stock.', error);
+      toast.error('No se pudo borrar la sesión guardada.');
+    }
+    setAuthenticated(false);
+    setSessionUser(null);
+    setRole('ADMIN');
+    setAuthOpen(true);
+    router.replace('/');
+  };
+
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-50 text-slate-800 transition-colors duration-200 dark:bg-[#070b14] dark:text-slate-100">
+    <>
+    {authReady && authenticated && <div className="flex h-screen w-screen overflow-hidden bg-slate-50 text-slate-800 transition-colors duration-200 dark:bg-[#070b14] dark:text-slate-100">
       <aside
         className={`${
           collapsed ? 'w-16' : 'w-64'
@@ -123,27 +209,6 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {!collapsed && (
-          <div className="shrink-0 border-t border-slate-200 bg-slate-50/50 p-3 dark:border-slate-800/80 dark:bg-slate-900/40">
-            <label htmlFor="session-role" className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              Rol / Usuario en sesión:
-            </label>
-            <select
-              id="session-role"
-              value={role}
-              onChange={(event) => {
-                const nextRole = event.target.value as SessionRole;
-                setRole(nextRole);
-                if (nextRole === 'GLOBAL') router.push('/pedidos');
-              }}
-              className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs font-medium text-slate-700 outline-none transition focus:border-sky-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-            >
-              <option value="ADMIN">Administrador (Acceso Total)</option>
-              <option value="AYUDANTE">Alumno Ayudante</option>
-              <option value="GLOBAL">Alumno Global (Consultar / Pedir)</option>
-            </select>
-          </div>
-        )}
       </aside>
 
       <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
@@ -181,11 +246,24 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
                   <p className="text-xs text-slate-500 dark:text-slate-400">{data.settings.campus}</p>
                 </div>
               </div>
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={logout} aria-label="Cerrar sesión" title="Cerrar sesión" className="flex items-center gap-2 rounded-lg px-2 py-2 text-rose-600 transition hover:bg-rose-50 dark:hover:bg-rose-950/40 sm:px-3">
+                  <LogOut className="h-4 w-4 shrink-0" />
+                  <span className="hidden text-xs font-semibold sm:inline">Cerrar sesión</span>
+                </button>
+              </div>
             </div>
           </header>
         </div>
         <main className="flex-1 space-y-6 overflow-y-auto px-4 py-4 md:px-8">{children}</main>
       </div>
-    </div>
+    </div>}
+    <AuthScreen
+      open={authReady && authOpen}
+      members={data.members}
+      onAuthenticate={authenticate}
+      onRegister={registerProfile}
+    />
+    </>
   );
 }

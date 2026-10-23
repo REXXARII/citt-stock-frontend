@@ -1,9 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { AlertTriangle, Download, Eye, Grid2X2, List, MapPin, PackagePlus, Plus, QrCode, Search, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { AlertTriangle, Clock3, Download, Eye, Grid2X2, List, MapPin, PackagePlus, Plus, Printer, Search, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppState, type AssetCategory, type AssetRecord, type AssetUnit } from '@/components/app-state';
+import { AssetImage } from '@/components/asset-image';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -32,6 +34,7 @@ function exportCsv(assets: AssetRecord[]) {
 }
 
 export default function InventarioPage() {
+  const router = useRouter();
   const { role, data, setData } = useAppState();
   const categories = [...new Set([...defaultCategories, ...data.settings.categories.map((item) => item.name)])];
   const [query, setQuery] = useState('');
@@ -43,6 +46,7 @@ export default function InventarioPage() {
   const [categoryInput, setCategoryInput] = useState<AssetCategory>('Equipamiento');
   const [unitType, setUnitType] = useState<AssetUnit>('UNID');
   const [name, setName] = useState('');
+  const [image, setImage] = useState('');
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
   const [initialStock, setInitialStock] = useState('1');
@@ -55,10 +59,25 @@ export default function InventarioPage() {
     const matchesQuery = `${asset.code} ${asset.name} ${asset.location}`.toLowerCase().includes(query.toLowerCase());
     return matchesCategory && matchesQuery;
   }), [category, data.assets, query]);
+  const selectedAsset = selected
+    ? data.assets.find((asset) => asset.code === selected.code) ?? null
+    : null;
+  const recentAssetHistory = selectedAsset
+    ? data.orders
+      .filter((order) => order.assetCode === selectedAsset.code)
+      .flatMap((order) => order.history.map((event) => ({
+        ...event,
+        orderId: order.id,
+        movementType: order.movementType,
+      })))
+      .sort((first, second) => new Date(second.date).getTime() - new Date(first.date).getTime())
+      .slice(0, 4)
+    : [];
 
   const openCreateForm = (mode: 'new' | 'restock') => {
     setOperation(mode);
     setName('');
+    setImage('');
     setLocation('');
     setDescription('');
     setInitialStock('1');
@@ -93,9 +112,18 @@ export default function InventarioPage() {
 
     const available = Number(initialStock);
     const total = Number(initialTotal);
-    if (!name.trim() || !location.trim() || !Number.isFinite(available) || !Number.isFinite(total) || available < 0 || total < available ||
+    const imageValue = image.trim();
+    let validImage = imageValue.startsWith('/') && !imageValue.startsWith('//') && !imageValue.includes('\\');
+    if (!validImage) {
+      try {
+        validImage = new URL(imageValue).protocol === 'https:';
+      } catch {
+        validImage = false;
+      }
+    }
+    if (!name.trim() || !location.trim() || !validImage || !Number.isFinite(available) || !Number.isFinite(total) || available < 0 || total < available ||
       (unitType === 'UNID' && (!Number.isInteger(available) || !Number.isInteger(total)))) {
-      toast.error('Revisa el nombre, ubicación y cantidades del activo.');
+      toast.error('Revisa el nombre, la imagen HTTPS o ruta local, ubicación y cantidades del activo.');
       return;
     }
     const prefix = data.settings.categories.find((item) => item.name === categoryInput)?.prefix
@@ -108,6 +136,7 @@ export default function InventarioPage() {
     const asset: AssetRecord = {
       code,
       name: name.trim(),
+      image: imageValue,
       category: categoryInput,
       location: location.trim(),
       unitType,
@@ -163,6 +192,7 @@ export default function InventarioPage() {
 
   const assetCard = (asset: AssetRecord) => (
     <article key={asset.code} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-[#111827]">
+      <AssetImage src={asset.image} alt={`Imagen de ${asset.name}`} className="mb-4 h-40 w-full rounded-xl" />
       <div className="flex items-start justify-between gap-2">
         <div><p className="font-mono text-xs font-bold text-sky-600">{asset.code}</p><h3 className="mt-1 font-bold">{asset.name}</h3></div>
         <Badge variant="outline">{asset.category}</Badge>
@@ -207,7 +237,7 @@ export default function InventarioPage() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredAssets.map((asset) => (
                   <tr key={asset.code} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                    <td className="p-3 font-mono font-semibold text-sky-600">{asset.code}</td><td className="p-3 font-semibold">{asset.name}</td><td className="p-3">{asset.category}</td><td className="p-3"><span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5 text-sky-500" />{asset.location}</span></td>
+                    <td className="p-3 font-mono font-semibold text-sky-600">{asset.code}</td><td className="p-3"><span className="flex items-center gap-2 font-semibold"><AssetImage src={asset.image} alt="" className="h-10 w-10 shrink-0 rounded-lg" />{asset.name}</span></td><td className="p-3">{asset.category}</td><td className="p-3"><span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5 text-sky-500" />{asset.location}</span></td>
                     <td className="p-3">{asset.available} {asset.unitType === 'KG' ? 'kg' : 'unid.'} <span className="text-slate-400">/ {asset.total}</span></td>
                     <td className="p-3"><Badge variant="outline" className={asset.available === 0 ? 'border-rose-200 text-rose-600' : 'border-emerald-200 text-emerald-600'}>{asset.status}</Badge></td>
                     <td className="p-3"><Button size="sm" variant="ghost" onClick={() => setSelected(asset)} aria-label={`Ver ${asset.name}`}><Eye className="h-4 w-4" /></Button></td>
@@ -228,19 +258,21 @@ export default function InventarioPage() {
             {operation === 'restock' ? (
               <>
                 <label className="block text-sm font-medium">Activo<select value={restockCode} onChange={(event) => setRestockCode(event.target.value)} className="mt-1 block w-full rounded-lg border bg-background p-2.5 dark:border-slate-700">{data.assets.map((asset) => <option key={asset.code} value={asset.code}>{asset.code} · {asset.name}</option>)}</select></label>
-                <label className="block text-sm font-medium">Cantidad<Input type="number" min={0.001} step="any" value={restockQuantity} onChange={(event) => setRestockQuantity(event.target.value)} /></label>
+                <label className="block text-sm font-medium">Cantidad a reponer ({data.assets.find((asset) => asset.code === restockCode)?.unitType === 'KG' ? 'kg' : 'unidades'})<Input type="number" min={0.001} step="any" value={restockQuantity} onChange={(event) => setRestockQuantity(event.target.value)} /></label>
               </>
             ) : (
               <>
                 <label className="block text-sm font-medium">Nombre<Input value={name} onChange={(event) => setName(event.target.value)} required /></label>
+                <label className="block text-sm font-medium">URL o ruta de imagen<Input type="text" value={image} onChange={(event) => setImage(event.target.value)} placeholder="https://... o /assets/imagen.jpg" required /></label>
+                {image.trim() && <AssetImage src={image.trim()} alt={`Vista previa de ${name || 'nuevo activo'}`} className="h-32 w-full rounded-xl" />}
                 <div className="grid grid-cols-2 gap-3">
                   <label className="block text-sm font-medium">Categoría<select value={categoryInput} onChange={(event) => setCategoryInput(event.target.value as AssetCategory)} className="mt-1 block w-full rounded-lg border bg-background p-2.5 dark:border-slate-700">{categories.map((item) => <option key={item}>{item}</option>)}</select></label>
                   <label className="block text-sm font-medium">Unidad<select value={unitType} onChange={(event) => setUnitType(event.target.value as AssetUnit)} className="mt-1 block w-full rounded-lg border bg-background p-2.5 dark:border-slate-700"><option value="UNID">Unidades</option><option value="KG">Kilogramos</option></select></label>
                 </div>
                 <label className="block text-sm font-medium">Ubicación<Input value={location} onChange={(event) => setLocation(event.target.value)} required /></label>
                 <div className="grid grid-cols-2 gap-3">
-                  <label className="block text-sm font-medium">Stock disponible<Input type="number" min={0} step={unitType === 'KG' ? '0.001' : '1'} value={initialStock} onChange={(event) => setInitialStock(event.target.value)} /></label>
-                  <label className="block text-sm font-medium">Stock total<Input type="number" min={0} step={unitType === 'KG' ? '0.001' : '1'} value={initialTotal} onChange={(event) => setInitialTotal(event.target.value)} /></label>
+                  <label className="block text-sm font-medium">Stock disponible ({unitType === 'KG' ? 'kg' : 'unidades'})<Input type="number" min={0} step={unitType === 'KG' ? '0.001' : '1'} value={initialStock} onChange={(event) => setInitialStock(event.target.value)} /></label>
+                  <label className="block text-sm font-medium">Stock total ({unitType === 'KG' ? 'kg' : 'unidades'})<Input type="number" min={0} step={unitType === 'KG' ? '0.001' : '1'} value={initialTotal} onChange={(event) => setInitialTotal(event.target.value)} /></label>
                 </div>
                 <label className="block text-sm font-medium">Descripción<textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={2} className="mt-1 block w-full rounded-lg border bg-background p-2.5 dark:border-slate-700" /></label>
                 <p className="text-xs text-slate-500">Código QR generado al guardar: {data.settings.categories.find((item) => item.name === categoryInput)?.prefix ?? defaultPrefixes[categoryInput] ?? 'CITT-'}###</p>
@@ -252,18 +284,108 @@ export default function InventarioPage() {
       </Dialog>
 
       <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>{selected?.name}</DialogTitle><DialogDescription>Ficha de activo CITT · {selected?.code}</DialogDescription></DialogHeader>
-          {selected && (
-            <div className="space-y-4">
-              <div id="asset-qr" className="flex flex-col items-center rounded-xl border border-dashed bg-white p-6 dark:border-slate-700 dark:bg-white">
-                <QRCodeSVG value={selected.code} size={180} level="M" title={`Código QR ${selected.code}`} />
-                <span className="mt-2 font-mono text-sm font-bold text-slate-900">{selected.code}</span>
+        <DialogContent showCloseButton={false} className="gap-0 overflow-y-auto border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-[#0f172a] sm:max-w-4xl sm:p-6">
+          {selectedAsset && (
+            <div className="space-y-5">
+              <section className="flex flex-col items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-[#111827] md:flex-row md:items-center">
+                <div className="flex min-w-0 items-center gap-4">
+                  <AssetImage src={selectedAsset.image} alt={`Imagen de ${selectedAsset.name}`} className="h-20 w-20 shrink-0 rounded-2xl border border-slate-200 dark:border-slate-700" />
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <DialogHeader className="gap-0">
+                        <DialogTitle className="text-xl">{selectedAsset.name}</DialogTitle>
+                        <DialogDescription className="sr-only">Ficha técnica del activo {selectedAsset.code}</DialogDescription>
+                      </DialogHeader>
+                      <Badge
+                        variant="outline"
+                        className={selectedAsset.status === 'De Baja'
+                          ? 'border-rose-500/30 bg-rose-500/10 text-rose-500'
+                          : selectedAsset.available === 0
+                            ? 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                            : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'}
+                      >
+                        {selectedAsset.status}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Categoría: {selectedAsset.category} · {selectedAsset.returnable ? 'Activo retornable' : 'Consumible / no retornable'}</p>
+                    <p className="mt-1 font-mono text-sm font-bold text-sky-600 dark:text-sky-400">{selectedAsset.code}</p>
+                  </div>
+                </div>
+
+                <div className="flex w-full items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-900 md:w-auto">
+                  <div id="asset-qr" className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white p-1.5 dark:border-slate-700">
+                    <QRCodeSVG value={selectedAsset.code} size={84} level="M" title={`Código QR ${selectedAsset.code}`} />
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    <p className="text-sm font-extrabold text-slate-900 dark:text-white">CITT Duoc UC</p>
+                    <p className="font-mono font-semibold text-sky-600 dark:text-sky-400">ID: {selectedAsset.code}</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">{data.settings.campus}</p>
+                    <Button variant="link" size="xs" className="h-auto justify-start px-0 pt-1 text-sky-600 dark:text-sky-400" onClick={printSelectedQr}>
+                      <Printer className="h-3 w-3" /> Imprimir QR
+                    </Button>
+                  </div>
+                </div>
+              </section>
+
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+                <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-[#111827] lg:col-span-2">
+                  <h3 className="flex items-center gap-2 border-b border-slate-100 pb-3 text-sm font-bold text-slate-900 dark:border-slate-800 dark:text-white">
+                    <SlidersHorizontal className="h-4 w-4 text-sky-500" /> Especificaciones del Activo
+                  </h3>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-5 text-xs sm:grid-cols-3">
+                    <div><p className="text-slate-400">Casillero / Ubicación</p><p className="mt-0.5 font-bold text-slate-800 dark:text-slate-100">{selectedAsset.location}</p></div>
+                    <div><p className="text-slate-400">Stock Disponible / Total</p><p className="mt-0.5 font-bold text-slate-800 dark:text-slate-100">{selectedAsset.available} / {selectedAsset.total} {selectedAsset.unitType === 'KG' ? 'Kg' : 'Unidades'}</p></div>
+                    <div><p className="text-slate-400">Unidad de control</p><p className="mt-0.5 font-bold text-slate-800 dark:text-slate-100">{selectedAsset.unitType === 'KG' ? 'Peso (kg)' : 'Unidades'}</p></div>
+                    <div><p className="text-slate-400">Categoría</p><p className="mt-0.5 font-bold text-slate-800 dark:text-slate-100">{selectedAsset.category}</p></div>
+                    <div><p className="text-slate-400">Estado operativo</p><p className={`mt-0.5 font-bold ${selectedAsset.status === 'De Baja' ? 'text-rose-500' : selectedAsset.available === 0 ? 'text-amber-500' : 'text-emerald-500'}`}>{selectedAsset.status}</p></div>
+                    <div><p className="text-slate-400">Tipo de activo</p><p className="mt-0.5 font-bold text-slate-800 dark:text-slate-100">{selectedAsset.returnable ? 'Requiere devolución' : 'Consumible'}</p></div>
+                  </div>
+                  <div>
+                    <p className="mb-1.5 text-xs text-slate-400">Observaciones / Incluye</p>
+                    <p className="min-h-12 rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-slate-900/90 dark:text-slate-300">
+                      {selectedAsset.description || 'Sin observaciones registradas.'}
+                    </p>
+                  </div>
+                  {selectedAsset.available === 0 && <p className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400"><AlertTriangle className="h-4 w-4" /> Stock agotado o crítico</p>}
+                </section>
+
+                <section className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-[#111827]">
+                  <div className="space-y-4">
+                    <h3 className="flex items-center gap-2 border-b border-slate-100 pb-3 text-sm font-bold text-slate-900 dark:border-slate-800 dark:text-white">
+                      <Clock3 className="h-4 w-4 text-sky-500" /> Historial Reciente
+                    </h3>
+                    {recentAssetHistory.length ? (
+                      <div className="space-y-3">
+                        {recentAssetHistory.map((event, index) => (
+                          <div key={`${event.orderId}-${event.date}-${index}`} className="flex items-start gap-2.5">
+                            <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${event.movementType === 'DEVOLUCION' ? 'bg-emerald-500' : 'bg-sky-500'}`} />
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{event.action}</p>
+                              <p className="text-[11px] text-slate-400">{event.actor} · {new Date(event.date).toLocaleDateString('es-CL')}</p>
+                              <p className="font-mono text-[10px] text-slate-400">{event.orderId}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="py-2 text-xs text-slate-500 dark:text-slate-400">No hay movimientos registrados para este activo.</p>
+                    )}
+                  </div>
+                  <div className="mt-5 space-y-2 border-t border-slate-100 pt-4 dark:border-slate-800">
+                    {role === 'ADMIN' && selectedAsset.status !== 'De Baja' && (
+                      <Button variant="destructive" size="sm" className="w-full" onClick={() => retireAsset(selectedAsset)}>
+                        <Trash2 className="h-3.5 w-3.5" /> Dar de baja
+                      </Button>
+                    )}
+                    <div className="flex gap-2">
+                      <Button variant="secondary" size="sm" className="flex-1" onClick={() => setSelected(null)}>Cerrar</Button>
+                      <Button size="sm" className="flex-1" disabled={selectedAsset.available <= 0 || selectedAsset.status === 'De Baja'} onClick={() => { setSelected(null); router.push('/pedidos'); }}>
+                        Ver catálogo de pedidos
+                      </Button>
+                    </div>
+                  </div>
+                </section>
               </div>
-              <div className="grid grid-cols-2 gap-3 text-sm"><p><span className="text-xs text-slate-500">Categoría</span><strong className="block">{selected.category}</strong></p><p><span className="text-xs text-slate-500">Stock actual</span><strong className="block">{selected.available} / {selected.total} {selected.unitType}</strong></p><p className="col-span-2"><span className="text-xs text-slate-500">Ubicación</span><strong className="block">{selected.location}</strong></p><p className="col-span-2 text-xs text-slate-500">{selected.description}</p></div>
-              {selected.available === 0 && <p className="flex items-center gap-2 text-xs text-amber-600"><AlertTriangle className="h-4 w-4" /> Stock agotado o crítico</p>}
-              <div className="flex justify-end border-t pt-3"><Button variant="outline" size="sm" onClick={printSelectedQr}><QrCode className="mr-1 h-3.5 w-3.5" /> Imprimir QR</Button></div>
-              {role === 'ADMIN' && selected.status !== 'De Baja' && <div className="flex justify-end border-t pt-3"><Button variant="destructive" size="sm" onClick={() => retireAsset(selected)}><Trash2 className="mr-1 h-3.5 w-3.5" /> Dar de baja</Button></div>}
             </div>
           )}
         </DialogContent>

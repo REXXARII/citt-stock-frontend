@@ -26,6 +26,7 @@ export type MovementType = 'PRESTAMO' | 'DEVOLUCION' | 'PEDIDO' | 'BAJA';
 export interface AssetRecord {
   code: string;
   name: string;
+  image: string;
   category: AssetCategory;
   location: string;
   unitType: AssetUnit;
@@ -47,6 +48,8 @@ export interface MemberRecord {
   loans: number;
   overdueDays: number;
 }
+
+export type SessionProfile = Pick<MemberRecord, 'name' | 'email' | 'run' | 'role' | 'school'>;
 
 export interface OrderEvent {
   action: string;
@@ -70,6 +73,7 @@ export interface OrderRecord {
   movementType?: MovementType;
   createdAt: string;
   returnDate: string;
+  signatureData?: string;
   ownerRole: SessionRole;
   stockDeducted: boolean;
   history: OrderEvent[];
@@ -111,6 +115,18 @@ export interface AppData {
   dismissedAlerts: string[];
 }
 
+const defaultAssetImageByCategory: Record<string, string> = {
+  Equipamiento: '/assets/kit-arduino-uno-r3.jpg',
+  '3D': '/assets/filamento-pla-negro.jpg',
+  Talleres: '/assets/estacion-soldar-weller-60w.jpg',
+  Mobiliario: '/assets/sillas-plegables.jpg',
+};
+
+const defaultAssetImageByCode: Record<string, string> = {
+  'EQ-CITT-089': defaultAssetImageByCategory.Equipamiento,
+  'TA-CITT-012': defaultAssetImageByCategory.Talleres,
+};
+
 const demoProfiles: Record<SessionRole, Omit<MemberRecord, 'id' | 'blocked' | 'loans' | 'overdueDays'>> = {
   ADMIN: {
     name: 'Paz Constanza Morales Saavedra',
@@ -140,6 +156,7 @@ const initialData: AppData = {
     {
       code: 'EQ-CITT-089',
       name: 'Kit Arduino Uno R3 Project',
+      image: defaultAssetImageByCode['EQ-CITT-089'],
       category: 'Equipamiento',
       location: 'Casillero A-02',
       unitType: 'UNID',
@@ -152,6 +169,7 @@ const initialData: AppData = {
     {
       code: '3D-CITT-005',
       name: 'Filamento PLA 1.75mm Negro',
+      image: defaultAssetImageByCategory['3D'],
       category: '3D',
       location: 'Casillero B-04',
       unitType: 'KG',
@@ -164,6 +182,7 @@ const initialData: AppData = {
     {
       code: 'TA-CITT-012',
       name: 'Estación de Soldar Weller 60W',
+      image: defaultAssetImageByCode['TA-CITT-012'],
       category: 'Talleres',
       location: 'Casillero C-01',
       unitType: 'UNID',
@@ -176,6 +195,7 @@ const initialData: AppData = {
     {
       code: 'IM-CITT-001',
       name: 'Sillas Plateadas Plegables CITT',
+      image: defaultAssetImageByCategory.Mobiliario,
       category: 'Mobiliario',
       location: 'Sin casillero / Mobiliario CITT',
       unitType: 'UNID',
@@ -231,7 +251,8 @@ const initialData: AppData = {
 interface AppStateValue {
   role: SessionRole;
   setRole: Dispatch<SetStateAction<SessionRole>>;
-  currentUser: (typeof demoProfiles)[SessionRole];
+  currentUser: SessionProfile;
+  setSessionUser: Dispatch<SetStateAction<SessionProfile | null>>;
   data: AppData;
   setData: Dispatch<SetStateAction<AppData>>;
 }
@@ -251,8 +272,22 @@ function isAppData(value: unknown): value is { role?: SessionRole; data?: AppDat
     Boolean(data.settings && Array.isArray(data.dismissedAlerts));
 }
 
+function addMissingAssetImages(data: AppData): AppData {
+  return {
+    ...data,
+    assets: data.assets.map((asset) => ({
+      ...asset,
+      image: defaultAssetImageByCode[asset.code] ||
+        asset.image ||
+        defaultAssetImageByCategory[asset.category] ||
+        defaultAssetImageByCategory.Equipamiento,
+    })),
+  };
+}
+
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<SessionRole>('ADMIN');
+  const [sessionUser, setSessionUser] = useState<SessionProfile | null>(null);
   const [data, setData] = useState<AppData>(initialData);
   const [hydrated, setHydrated] = useState(false);
 
@@ -265,7 +300,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         // These updates hydrate browser-persisted state after the server render.
         // eslint-disable-next-line react-hooks/set-state-in-effect
         if (parsed.role) setRole(parsed.role);
-        if (parsed.data) setData(parsed.data);
+        if (parsed.data) setData(addMissingAssetImages(parsed.data));
       }
     } catch (error) {
       console.error('No se pudieron cargar los datos guardados de CITT Stock.', error);
@@ -286,7 +321,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [data, hydrated, role]);
 
   return (
-    <AppStateContext.Provider value={{ role, setRole, currentUser: demoProfiles[role], data, setData }}>
+    <AppStateContext.Provider value={{ role, setRole, currentUser: sessionUser ?? demoProfiles[role], setSessionUser, data, setData }}>
       {children}
     </AppStateContext.Provider>
   );
