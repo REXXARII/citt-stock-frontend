@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from '@/components/theme-provider';
 import { AuthScreen } from '@/components/auth-screen';
 import {
   Bell,
-  Box,
   ClipboardCheck,
   LayoutGrid,
   LogOut,
@@ -163,9 +163,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
       >
         <div className="flex h-20 shrink-0 items-center justify-between border-b border-slate-200 px-4 dark:border-slate-800/80">
           <div className="flex items-center gap-3 overflow-hidden">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-lg shadow-sky-500/25">
-              <Box className="h-5 w-5" />
-            </div>
+            <Image src="/citt-logo.png" alt="" width={447} height={447} className="h-10 w-10 shrink-0 rounded-full object-cover" />
             {!collapsed && (
               <div className="truncate whitespace-nowrap">
                 <h1 className="block text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white">CITT Stock</h1>
@@ -215,9 +213,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
         <div className="z-20 shrink-0 bg-slate-50 px-4 pb-2 pt-4 dark:bg-[#070b14] md:px-8">
           <header className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-3.5 shadow-sm dark:border-slate-800/90 dark:bg-[#111827]">
             <div className="flex min-w-0 items-center gap-3.5">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-md shadow-sky-500/20">
-                <Box className="h-6 w-6" />
-              </div>
+              <Image src="/citt-logo.png" alt="" width={447} height={447} className="h-11 w-11 shrink-0 rounded-full object-cover" />
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2.5">
                   <h2 className="text-lg font-extrabold leading-tight tracking-tight text-slate-900 dark:text-white md:text-xl">CITT Stock</h2>

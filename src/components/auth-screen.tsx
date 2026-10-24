@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { Box } from 'lucide-react';
+import Image from 'next/image';
 import type { MemberRecord, SessionProfile, SessionRole } from '@/components/app-state';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -111,7 +111,7 @@ export function AuthScreen({ members, open, onAuthenticate, onRegister }: AuthSc
     <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-slate-100 p-4 dark:bg-[#070b14]">
       <section className="my-auto w-full max-w-lg space-y-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-[#111827]">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-sky-500 text-white"><Box className="h-6 w-6" /></div>
+          <Image src="/citt-logo.png" alt="" width={447} height={447} className="h-11 w-11 shrink-0 rounded-full object-cover" />
           <div><h1 className="text-lg font-extrabold">Bienvenido a CITT Stock</h1><p className="mt-1 text-xs text-slate-500">Inicia sesión o crea una cuenta de demostración.</p></div>
         </div>
         <div className="flex gap-2">
