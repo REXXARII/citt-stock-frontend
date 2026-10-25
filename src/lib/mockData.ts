@@ -1,4 +1,5 @@
 
+
 // 1. Contrato del Catálogo de Activos
 export const mockItems = {
   data: [
