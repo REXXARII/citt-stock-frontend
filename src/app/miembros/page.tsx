@@ -1,27 +1,36 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { CheckCircle2, Clock, Search, ShieldAlert, UserPlus, Users } from 'lucide-react';
+import { CheckCircle2, Clock, ShieldAlert, UserPlus, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppState, type MemberRecord } from '@/components/app-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { ViewToolbar } from '@/components/view-toolbar';
 
 const emptyMember = { name: '', email: '', run: '', role: 'Alumno', school: 'Informática' };
 
 export default function MiembrosPage() {
   const { role, data, setData } = useAppState();
   const [searchTerm, setSearchTerm] = useState('');
+  const [roleFilter, setRoleFilter] = useState('Todos los Roles');
+  const [statusFilter, setStatusFilter] = useState('Todos');
+  const [dateFilter, setDateFilter] = useState('');
+  const [view, setView] = useState<'list' | 'grid'>('list');
   const [formOpen, setFormOpen] = useState(false);
   const [detail, setDetail] = useState<MemberRecord | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyMember);
 
-  const filteredMembers = useMemo(() => data.members.filter((member) =>
-    `${member.name} ${member.run} ${member.email} ${member.school}`.toLowerCase().includes(searchTerm.toLowerCase()),
-  ), [data.members, searchTerm]);
+  const filteredMembers = useMemo(() => data.members.filter((member) => {
+    const matchesSearch = `${member.name} ${member.run} ${member.email} ${member.school}`.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesRole = roleFilter === 'Todos los Roles' || member.role === roleFilter;
+    const matchesStatus = statusFilter === 'Todos' || (statusFilter === 'Bloqueados' ? member.blocked : !member.blocked);
+    const matchesDate = !dateFilter || data.orders.some((order) => order.run.toLowerCase() === member.run.toLowerCase() && order.createdAt.slice(0, 10) === dateFilter);
+    return matchesSearch && matchesRole && matchesStatus && matchesDate;
+  }), [data.members, data.orders, dateFilter, roleFilter, searchTerm, statusFilter]);
 
   const openForm = (member?: MemberRecord) => {
     if (role !== 'ADMIN') {
@@ -91,7 +100,27 @@ export default function MiembrosPage() {
       </div>
 
       <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-[#111827]">
-        <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><Input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Buscar usuario por nombre, RUN, correo o escuela..." className="pl-9" /></div>
+        <ViewToolbar
+          query={searchTerm}
+          onQueryChange={setSearchTerm}
+          searchPlaceholder="Buscar por nombre, RUN, correo o escuela..."
+          date={dateFilter}
+          onDateChange={setDateFilter}
+          dateLabel="Filtrar por fecha de movimiento"
+          filter={roleFilter}
+          filterOptions={[{ value: 'Todos los Roles', label: 'Todos los Roles' }, { value: 'Usuario Global', label: 'Usuario Global' }, ...roleOptions.map((item) => ({ value: item, label: item }))]}
+          onFilterChange={setRoleFilter}
+          pills={[
+            { value: 'Todos', label: 'Todos' },
+            { value: 'Habilitados', label: 'Habilitados' },
+            { value: 'Bloqueados', label: 'Bloqueados' },
+          ]}
+          activePill={statusFilter}
+          onPillChange={setStatusFilter}
+          view={view}
+          onViewChange={setView}
+        />
+        {view === 'list' ? <>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-xs">
             <thead className="border-b bg-slate-50 text-slate-500 dark:border-slate-800 dark:bg-slate-900/60"><tr>{['Usuario', 'Correo', 'RUN / Identificador', 'Rol', 'Escuela / Área', 'Estado', 'Préstamos', 'Acción'].map((label) => <th key={label} className="p-3">{label}</th>)}</tr></thead>
@@ -110,6 +139,17 @@ export default function MiembrosPage() {
           </table>
           {!filteredMembers.length && <p className="py-8 text-center text-sm text-slate-500">No se encontraron miembros para esa búsqueda.</p>}
         </div>
+        </> : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {filteredMembers.map((member) => (
+            <article key={member.id} className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+              <div className="flex items-start justify-between gap-2"><div><h2 className="font-bold">{member.name}</h2><p className="text-xs text-slate-500">{member.email}</p></div><Badge variant="outline">{member.role}</Badge></div>
+              <p className="text-xs text-slate-500">RUN: {member.run} · {member.school}</p>
+              <p className={`text-xs font-medium ${member.blocked ? 'text-rose-600' : 'text-emerald-600'}`}>{member.blocked ? `Bloqueado (${member.overdueDays} días)` : 'Habilitado'} · {member.loans} préstamo(s) activo(s)</p>
+              <div className="flex flex-wrap gap-1.5"><Button size="sm" variant="outline" onClick={() => setDetail(member)}>Ficha</Button>{role === 'ADMIN' && <Button size="sm" variant="outline" onClick={() => openForm(member)}>Editar</Button>}{role === 'ADMIN' && <Button size="sm" variant={member.blocked ? 'secondary' : 'destructive'} onClick={() => toggleBlocked(member)}>{member.blocked ? 'Desbloquear' : 'Bloquear'}</Button>}</div>
+            </article>
+          ))}
+          {!filteredMembers.length && <p className="col-span-full py-8 text-center text-sm text-slate-500">No se encontraron miembros para esos filtros.</p>}
+        </div>}
       </section>
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>

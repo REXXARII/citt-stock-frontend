@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from '@/components/theme-provider';
 import { AuthScreen } from '@/components/auth-screen';
+import { restoreSession } from '@/lib/auth-api';
 import {
   Bell,
   ClipboardCheck,
@@ -46,13 +47,14 @@ const roleLabels: Record<SessionRole, string> = {
 
 const authStorageKey = 'citt-stock-frontend-session';
 
-function isStoredSession(value: unknown): value is { profile: SessionProfile; role: SessionRole } {
+function isStoredSession(value: unknown): value is { profile: SessionProfile; role: SessionRole; accessToken: string } {
   if (!value || typeof value !== 'object') return false;
-  const session = value as { profile?: unknown; role?: unknown };
+  const session = value as { profile?: unknown; role?: unknown; accessToken?: unknown };
   if (!session.profile || typeof session.profile !== 'object') return false;
   if (!['ADMIN', 'AYUDANTE', 'GLOBAL'].includes(String(session.role))) return false;
+  if (typeof session.accessToken !== 'string' || !session.accessToken) return false;
   const profile = session.profile as Record<string, unknown>;
-  return ['name', 'email', 'run', 'role', 'school'].every((field) => typeof profile[field] === 'string');
+  return ['id', 'name', 'email', 'run', 'role', 'school'].every((field) => typeof profile[field] === 'string');
 }
 
 export function LayoutShell({ children }: { children: React.ReactNode }) {
@@ -66,15 +68,18 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
+    let active = true;
+    const restore = async () => {
     try {
       const savedSession = window.sessionStorage.getItem(authStorageKey);
       if (savedSession) {
         const parsed: unknown = JSON.parse(savedSession);
         if (!isStoredSession(parsed)) throw new Error('La sesión guardada no tiene un formato válido.');
-        setSessionUser(parsed.profile);
-        setRole(parsed.role);
-        // Restore browser-owned session state after the client has mounted.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+        const session = await restoreSession(parsed.accessToken);
+        if (!active) return;
+        window.sessionStorage.setItem(authStorageKey, JSON.stringify(session));
+        setSessionUser(session.profile);
+        setRole(session.role);
         setAuthenticated(true);
         setAuthOpen(false);
       }
@@ -85,10 +90,15 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
       } catch (storageError) {
         console.error('No se pudo limpiar la sesión inválida de CITT Stock.', storageError);
       }
-      toast.error('No se pudo recuperar tu sesión. Inicia sesión nuevamente.');
+      if (active) toast.error('No se pudo recuperar tu sesión. Inicia sesión nuevamente.');
     } finally {
-      setAuthReady(true);
+      if (active) setAuthReady(true);
     }
+    };
+    void restore();
+    return () => {
+      active = false;
+    };
   }, [setRole, setSessionUser]);
 
   useEffect(() => {
@@ -112,9 +122,13 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
     .join('')
     .toUpperCase();
 
-  const authenticate = (profile: SessionProfile, nextRole: SessionRole) => {
+  const authenticate = (profile: SessionProfile, nextRole: SessionRole, accessToken: string) => {
     try {
-      window.sessionStorage.setItem(authStorageKey, JSON.stringify({ profile, role: nextRole }));
+      window.sessionStorage.setItem(authStorageKey, JSON.stringify({
+        profile,
+        role: nextRole,
+        accessToken,
+      }));
       setSessionUser(profile);
       setRole(nextRole);
       setAuthenticated(true);
@@ -130,9 +144,9 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
     setData((current) => ({
       ...current,
       members: [{
-        id: `M-REG-${Date.now()}`,
+        id: profile.id ?? `M-REG-${Date.now()}`,
         ...profile,
-        blocked: false,
+        blocked: profile.is_blocked ?? false,
         loans: 0,
         overdueDays: 0,
       }, ...current.members],
@@ -256,7 +270,6 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
     </div>}
     <AuthScreen
       open={authReady && authOpen}
-      members={data.members}
       onAuthenticate={authenticate}
       onRegister={registerProfile}
     />

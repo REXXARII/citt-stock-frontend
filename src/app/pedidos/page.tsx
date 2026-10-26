@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { CalendarClock, Plus, Search, ShoppingBag, Trash2 } from 'lucide-react';
+import { CalendarClock, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppState, type AssetCategory, type OrderRecord } from '@/components/app-state';
 import { AssetImage } from '@/components/asset-image';
@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { ViewToolbar } from '@/components/view-toolbar';
 
 const categories: { value: AssetCategory | 'Todos'; label: string }[] = [
   { value: 'Todos', label: 'Todos' },
@@ -40,6 +41,11 @@ export default function PedidosPage() {
   const { role, currentUser, data, setData } = useAppState();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<AssetCategory | 'Todos'>('Todos');
+  const [dateFilter, setDateFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('Todos');
+  const [orderStatusFilter, setOrderStatusFilter] = useState('Todos');
+  const [orderTypeFilter, setOrderTypeFilter] = useState('Todos los Tipos');
+  const [view, setView] = useState<'list' | 'grid'>('grid');
   const [cart, setCart] = useState<CartLine[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [notes, setNotes] = useState('');
@@ -49,12 +55,20 @@ export default function PedidosPage() {
   const filteredAssets = useMemo(() => data.assets.filter((asset) => {
     const matchesCategory = category === 'Todos' || asset.category === category;
     const matchesQuery = `${asset.code} ${asset.name} ${asset.location}`.toLowerCase().includes(query.toLowerCase());
-    return matchesCategory && matchesQuery;
-  }), [category, data.assets, query]);
+    const matchesStatus = statusFilter === 'Todos' || (statusFilter === 'Disponible' ? asset.available > 0 : asset.available <= 0);
+    const matchesDate = !dateFilter || data.orders.some((order) => order.assetCode === asset.code && order.createdAt.slice(0, 10) === dateFilter);
+    return matchesCategory && matchesQuery && matchesStatus && matchesDate;
+  }), [category, data.assets, data.orders, dateFilter, query, statusFilter]);
 
   const myOrders = data.orders.filter((order) =>
     order.run.toLowerCase() === currentUser.run.toLowerCase() || order.ownerRole === role,
   );
+  const filteredMyOrders = useMemo(() => myOrders.filter((order) =>
+    `${order.id} ${order.assetName} ${order.assetCode} ${order.status}`.toLowerCase().includes(query.toLowerCase()) &&
+    (orderStatusFilter === 'Todos' || order.status === orderStatusFilter) &&
+    (orderTypeFilter === 'Todos los Tipos' || (order.movementType ?? 'PEDIDO') === orderTypeFilter) &&
+    (!dateFilter || order.createdAt.slice(0, 10) === dateFilter),
+  ), [dateFilter, myOrders, orderStatusFilter, orderTypeFilter, query]);
 
   const addToCart = (code: string) => {
     const asset = data.assets.find((item) => item.code === code);
@@ -170,19 +184,28 @@ export default function PedidosPage() {
       {ordersTab === 'catalog' ? (
         <>
           <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-[#111827]">
-            <div className="relative">
-              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar Arduino, equipo, ubicación..." className="h-11 pl-10" />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {categories.map((item) => (
-                <Button key={item.value} size="sm" variant={category === item.value ? 'default' : 'outline'} onClick={() => setCategory(item.value)}>
-                  {item.label}
-                </Button>
-              ))}
-            </div>
+            <ViewToolbar
+              query={query}
+              onQueryChange={setQuery}
+              searchPlaceholder="Buscar Arduino, equipo o ubicación..."
+              date={dateFilter}
+              onDateChange={setDateFilter}
+              dateLabel="Filtrar por fecha de movimiento"
+              filter={category}
+              filterOptions={categories.map((item) => ({ value: item.value, label: item.label }))}
+              onFilterChange={(value) => setCategory(value as AssetCategory | 'Todos')}
+              pills={[
+                { value: 'Todos', label: 'Todos' },
+                { value: 'Disponible', label: 'Disponible' },
+                { value: 'Sin Stock', label: 'Sin Stock' },
+              ]}
+              activePill={orderStatusFilter}
+              onPillChange={setOrderStatusFilter}
+              view={view}
+              onViewChange={setView}
+            />
           </section>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {view === 'grid' ? <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {filteredAssets.map((asset) => (
               <article key={asset.code} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#111827]">
                  <AssetImage src={asset.image} alt={`Imagen de ${asset.name}`} className="h-36 w-full bg-linear-to-br from-sky-500/10 to-cyan-500/20" />
@@ -208,15 +231,39 @@ export default function PedidosPage() {
                 </div>
               </article>
             ))}
-          </div>
+          </div> : <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-[#111827]"><table className="w-full min-w-[700px] text-left text-xs">
+            <thead className="border-b bg-slate-50 text-slate-500 dark:border-slate-800 dark:bg-slate-900/60"><tr>{['Activo', 'Categoría', 'Ubicación', 'Disponible', 'Acción'].map((label) => <th key={label} className="p-3">{label}</th>)}</tr></thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">{filteredAssets.map((asset) => <tr key={asset.code}>
+              <td className="p-3"><span className="font-mono text-sky-600">{asset.code}</span><p className="mt-1 font-semibold">{asset.name}</p></td><td className="p-3">{asset.category}</td><td className="p-3">{asset.location}</td><td className="p-3">{asset.available} {asset.unitType === 'KG' ? 'kg' : 'unid.'}</td><td className="p-3"><Button size="sm" disabled={maxRequestQuantity(asset.available, asset.unitType) < 1} onClick={() => addToCart(asset.code)}><Plus className="mr-1 h-4 w-4" />Agregar</Button></td>
+            </tr>)}</tbody>
+          </table></div>}
           {!filteredAssets.length && <p className="rounded-xl border border-dashed p-8 text-center text-sm text-slate-500">No hay activos para esta búsqueda.</p>}
         </>
       ) : (
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#111827]">
           <h2 className="text-lg font-bold">Seguimiento de mis pedidos</h2>
-          {!myOrders.length ? <p className="py-8 text-center text-sm text-slate-500">Aún no tienes pedidos activos.</p> : (
-            <div className="space-y-3">
-              {myOrders.map((order) => (
+          <ViewToolbar
+            query={query}
+            onQueryChange={setQuery}
+            searchPlaceholder="Buscar por pedido, activo o estado..."
+            date={dateFilter}
+            onDateChange={setDateFilter}
+            filter={orderTypeFilter}
+            filterOptions={[
+              { value: 'Todos los Tipos', label: 'Todos los Tipos' },
+              { value: 'PRESTAMO', label: 'Préstamo' },
+              { value: 'PEDIDO', label: 'Pedido' },
+            ]}
+            onFilterChange={setOrderTypeFilter}
+            pills={['Todos', 'Solicitado', 'Aceptado', 'Preparado', 'Enviado', 'Recibido', 'Rechazado'].map((item) => ({ value: item, label: item }))}
+            activePill={statusFilter}
+            onPillChange={setStatusFilter}
+            view={view}
+            onViewChange={setView}
+          />
+          {!filteredMyOrders.length ? <p className="py-8 text-center text-sm text-slate-500">{myOrders.length ? 'No hay pedidos con esos filtros.' : 'Aún no tienes pedidos activos.'}</p> : (
+            <div className={view === 'list' ? 'space-y-3' : 'grid grid-cols-1 gap-3 xl:grid-cols-2'}>
+              {filteredMyOrders.map((order) => (
                 <article key={order.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div><p className="font-mono text-xs font-bold text-sky-600">{order.id}</p><h3 className="mt-1 font-semibold">{order.assetName}</h3></div>
