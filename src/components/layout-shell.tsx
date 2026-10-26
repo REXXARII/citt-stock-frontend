@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from '@/components/theme-provider';
 import { AuthScreen } from '@/components/auth-screen';
+import { restoreSession } from '@/lib/auth-api';
 import {
   Bell,
-  Box,
   ClipboardCheck,
   LayoutGrid,
   LogOut,
@@ -46,13 +47,14 @@ const roleLabels: Record<SessionRole, string> = {
 
 const authStorageKey = 'citt-stock-frontend-session';
 
-function isStoredSession(value: unknown): value is { profile: SessionProfile; role: SessionRole } {
+function isStoredSession(value: unknown): value is { profile: SessionProfile; role: SessionRole; accessToken: string } {
   if (!value || typeof value !== 'object') return false;
-  const session = value as { profile?: unknown; role?: unknown };
+  const session = value as { profile?: unknown; role?: unknown; accessToken?: unknown };
   if (!session.profile || typeof session.profile !== 'object') return false;
   if (!['ADMIN', 'AYUDANTE', 'GLOBAL'].includes(String(session.role))) return false;
+  if (typeof session.accessToken !== 'string' || !session.accessToken) return false;
   const profile = session.profile as Record<string, unknown>;
-  return ['name', 'email', 'run', 'role', 'school'].every((field) => typeof profile[field] === 'string');
+  return ['id', 'name', 'email', 'run', 'role', 'school'].every((field) => typeof profile[field] === 'string');
 }
 
 export function LayoutShell({ children }: { children: React.ReactNode }) {
@@ -66,15 +68,18 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
+    let active = true;
+    const restore = async () => {
     try {
       const savedSession = window.sessionStorage.getItem(authStorageKey);
       if (savedSession) {
         const parsed: unknown = JSON.parse(savedSession);
         if (!isStoredSession(parsed)) throw new Error('La sesión guardada no tiene un formato válido.');
-        setSessionUser(parsed.profile);
-        setRole(parsed.role);
-        // Restore browser-owned session state after the client has mounted.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+        const session = await restoreSession(parsed.accessToken);
+        if (!active) return;
+        window.sessionStorage.setItem(authStorageKey, JSON.stringify(session));
+        setSessionUser(session.profile);
+        setRole(session.role);
         setAuthenticated(true);
         setAuthOpen(false);
       }
@@ -85,10 +90,15 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
       } catch (storageError) {
         console.error('No se pudo limpiar la sesión inválida de CITT Stock.', storageError);
       }
-      toast.error('No se pudo recuperar tu sesión. Inicia sesión nuevamente.');
+      if (active) toast.error('No se pudo recuperar tu sesión. Inicia sesión nuevamente.');
     } finally {
-      setAuthReady(true);
+      if (active) setAuthReady(true);
     }
+    };
+    void restore();
+    return () => {
+      active = false;
+    };
   }, [setRole, setSessionUser]);
 
   useEffect(() => {
@@ -112,9 +122,13 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
     .join('')
     .toUpperCase();
 
-  const authenticate = (profile: SessionProfile, nextRole: SessionRole) => {
+  const authenticate = (profile: SessionProfile, nextRole: SessionRole, accessToken: string) => {
     try {
-      window.sessionStorage.setItem(authStorageKey, JSON.stringify({ profile, role: nextRole }));
+      window.sessionStorage.setItem(authStorageKey, JSON.stringify({
+        profile,
+        role: nextRole,
+        accessToken,
+      }));
       setSessionUser(profile);
       setRole(nextRole);
       setAuthenticated(true);
@@ -130,9 +144,9 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
     setData((current) => ({
       ...current,
       members: [{
-        id: `M-REG-${Date.now()}`,
+        id: profile.id ?? `M-REG-${Date.now()}`,
         ...profile,
-        blocked: false,
+        blocked: profile.is_blocked ?? false,
         loans: 0,
         overdueDays: 0,
       }, ...current.members],
@@ -163,9 +177,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
       >
         <div className="flex h-20 shrink-0 items-center justify-between border-b border-slate-200 px-4 dark:border-slate-800/80">
           <div className="flex items-center gap-3 overflow-hidden">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-lg shadow-sky-500/25">
-              <Box className="h-5 w-5" />
-            </div>
+            <Image src="/citt-logo.png" alt="" width={447} height={447} className="h-10 w-10 shrink-0 rounded-full object-cover" />
             {!collapsed && (
               <div className="truncate whitespace-nowrap">
                 <h1 className="block text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white">CITT Stock</h1>
@@ -215,9 +227,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
         <div className="z-20 shrink-0 bg-slate-50 px-4 pb-2 pt-4 dark:bg-[#070b14] md:px-8">
           <header className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-3.5 shadow-sm dark:border-slate-800/90 dark:bg-[#111827]">
             <div className="flex min-w-0 items-center gap-3.5">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-md shadow-sky-500/20">
-                <Box className="h-6 w-6" />
-              </div>
+              <Image src="/citt-logo.png" alt="" width={447} height={447} className="h-11 w-11 shrink-0 rounded-full object-cover" />
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2.5">
                   <h2 className="text-lg font-extrabold leading-tight tracking-tight text-slate-900 dark:text-white md:text-xl">CITT Stock</h2>
@@ -260,7 +270,6 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
     </div>}
     <AuthScreen
       open={authReady && authOpen}
-      members={data.members}
       onAuthenticate={authenticate}
       onRegister={registerProfile}
     />

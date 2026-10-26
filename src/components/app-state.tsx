@@ -49,7 +49,10 @@ export interface MemberRecord {
   overdueDays: number;
 }
 
-export type SessionProfile = Pick<MemberRecord, 'name' | 'email' | 'run' | 'role' | 'school'>;
+export type SessionProfile = Pick<MemberRecord, 'name' | 'email' | 'run' | 'role' | 'school'> & {
+  id?: string;
+  is_blocked?: boolean;
+};
 
 export interface OrderEvent {
   action: string;

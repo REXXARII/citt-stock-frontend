@@ -8,18 +8,29 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { ViewToolbar } from '@/components/view-toolbar';
 
 const statusList: WorkOrder['status'][] = ['Diagnóstico', 'En Proceso', 'Esperando Repuesto', 'Finalizada'];
 
 export default function MantenimientoPage() {
   const { role, currentUser, data, setData } = useAppState();
   const [statusFilter, setStatusFilter] = useState('Todas');
+  const [query, setQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState('Todos los Tipos');
+  const [dateFilter, setDateFilter] = useState('');
+  const [view, setView] = useState<'list' | 'grid'>('grid');
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ asset: '', category: 'Equipamiento', type: 'Preventivo' as WorkOrder['type'], description: '', technician: '', date: '' });
   const [pendingStatus, setPendingStatus] = useState<{ id: string; status: WorkOrder['status'] } | null>(null);
   const [observation, setObservation] = useState('');
 
-  const filteredOrders = useMemo(() => data.workOrders.filter((order) => statusFilter === 'Todas' || order.status === statusFilter), [data.workOrders, statusFilter]);
+  const filteredOrders = useMemo(() => data.workOrders.filter((order) => {
+    const matchesSearch = `${order.id} ${order.asset} ${order.category} ${order.description} ${order.technician}`.toLowerCase().includes(query.toLowerCase());
+    return matchesSearch &&
+      (statusFilter === 'Todas' || order.status === statusFilter) &&
+      (typeFilter === 'Todos los Tipos' || order.type === typeFilter) &&
+      (!dateFilter || order.date === dateFilter);
+  }), [data.workOrders, dateFilter, query, statusFilter, typeFilter]);
 
   const createOrder = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -74,11 +85,28 @@ export default function MantenimientoPage() {
         {role === 'ADMIN' && <Button onClick={() => setCreateOpen(true)}><Plus className="mr-1 h-4 w-4" /> Crear Orden de Trabajo</Button>}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {['Todas', ...statusList].map((status) => <Button key={status} size="sm" variant={statusFilter === status ? 'default' : 'outline'} onClick={() => setStatusFilter(status)}>{status}</Button>)}
-      </div>
+      <ViewToolbar
+        query={query}
+        onQueryChange={setQuery}
+        searchPlaceholder="Buscar por orden, activo, técnico o descripción..."
+        date={dateFilter}
+        onDateChange={setDateFilter}
+        dateLabel="Filtrar por fecha de mantenimiento"
+        filter={typeFilter}
+        filterOptions={[
+          { value: 'Todos los Tipos', label: 'Todos los Tipos' },
+          { value: 'Preventivo', label: 'Preventivo' },
+          { value: 'Correctivo', label: 'Correctivo' },
+        ]}
+        onFilterChange={setTypeFilter}
+        pills={[{ value: 'Todas', label: 'Todas' }, ...statusList.map((status) => ({ value: status, label: status }))]}
+        activePill={statusFilter}
+        onPillChange={setStatusFilter}
+        view={view}
+        onViewChange={setView}
+      />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className={`grid grid-cols-1 gap-4 ${view === 'grid' ? 'md:grid-cols-2 xl:grid-cols-3' : ''}`}>
         {filteredOrders.map((order) => (
           <article key={order.id} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-[#111827]">
             <div className="flex items-start justify-between gap-2"><span className="font-mono text-xs font-bold text-sky-600">{order.id}</span><Badge variant="outline" className={badgeStyle[order.status]}>{order.status}</Badge></div>
