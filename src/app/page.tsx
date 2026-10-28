@@ -14,9 +14,16 @@ import {
   FileText,
 } from 'lucide-react';
 import { useAppState } from '@/components/app-state';
+import PedidosPage from '@/app/pedidos/page';
 
 export default function DashboardPage() {
-  const { data } = useAppState();
+  const { role, data } = useAppState();
+
+  // Si el usuario tiene rol Alumno Global, se muestra la vista de Pedidos / Catálogo
+  if (role === 'GLOBAL') {
+    return <PedidosPage />;
+  }
+
   const totalUnits = data.assets.reduce((sum, item) => sum + item.total, 0);
   const activeLoans = data.orders.filter((order) => order.movementType === 'PRESTAMO' && order.status === 'Recibido').length;
   const criticalStock = data.assets.filter((item) => item.available === 0 || item.available / Math.max(item.total, 1) * 100 <= data.settings.lowStockThreshold).length;

@@ -2,8 +2,6 @@
 
 import { useState, type FormEvent } from 'react';
 import Image from 'next/image';
-import type { MemberRecord, SessionProfile, SessionRole } from '@/components/app-state';
-import { Box } from 'lucide-react';
 import type { SessionProfile, SessionRole } from '@/components/app-state';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,10 +64,11 @@ export function AuthScreen({ open, onAuthenticate, onRegister }: AuthScreenProps
     <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-slate-100 p-4 dark:bg-[#070b14]">
       <section className="my-auto w-full max-w-lg space-y-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-[#111827]">
         <div className="flex items-center gap-3">
-          <Image src="/citt-logo.png" alt="" width={447} height={447} className="h-11 w-11 shrink-0 rounded-full object-cover" />
-          <div><h1 className="text-lg font-extrabold">Bienvenido a CITT Stock</h1><p className="mt-1 text-xs text-slate-500">Inicia sesión o crea una cuenta de demostración.</p></div>
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-sky-500 text-white"><Box className="h-6 w-6" /></div>
-          <div><h1 className="text-lg font-extrabold">Bienvenido a CITT Stock</h1><p className="mt-1 text-xs text-slate-500">Inicia sesión o crea una cuenta.</p></div>
+          <Image src="/citt-logo.png" alt="CITT Duoc UC" width={447} height={447} className="h-11 w-11 shrink-0 rounded-full object-cover" />
+          <div>
+            <h1 className="text-lg font-extrabold">Bienvenido a CITT Stock</h1>
+            <p className="mt-1 text-xs text-slate-500">Inicia sesión o crea una cuenta.</p>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button type="button" className="flex-1" variant={tab === 'login' ? 'default' : 'secondary'} onClick={() => { setTab('login'); setError(''); }}>Iniciar sesión</Button>
@@ -96,15 +95,35 @@ export function AuthScreen({ open, onAuthenticate, onRegister }: AuthScreenProps
           <Button type="submit" disabled={isSubmitting} className="w-full">{isSubmitting ? 'Conectando...' : tab === 'login' ? 'Ingresar' : 'Crear cuenta y continuar'}</Button>
         </form>
 
-        <p className="text-center text-[10px] text-slate-400">Autenticación local de demostración; no reemplaza un servicio de acceso real.</p>
-        {process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN === 'true' && (
-          <div className="rounded-xl bg-sky-500/10 p-3 text-xs leading-relaxed text-sky-800 dark:text-sky-200">
-            <p className="font-bold">Acceso de demostración local</p>
-            <p>Administrador: 16.321.654-8 · Ayudante: 19.882.112-k · Usuario global: 18.765.432-1</p>
-            <p>La contraseña de demostración se configura solo en el entorno local.</p>
+        <div className="rounded-xl bg-sky-500/10 p-3 text-xs leading-relaxed text-sky-800 dark:text-sky-200">
+          <p className="font-bold">Acceso de demostración rápido</p>
+          <div className="mt-1 flex flex-wrap gap-1">
+            <button
+              type="button"
+              onClick={() => { setTab('login'); setRun('16.321.654-8'); setPassword('citt2026'); setError(''); }}
+              className="rounded-lg bg-sky-500/20 px-2 py-1 text-[11px] font-semibold text-sky-700 hover:bg-sky-500/30 dark:text-sky-300"
+            >
+              Admin: 16.321.654-8
+            </button>
+            <button
+              type="button"
+              onClick={() => { setTab('login'); setRun('19.882.112-k'); setPassword('citt2026'); setError(''); }}
+              className="rounded-lg bg-sky-500/20 px-2 py-1 text-[11px] font-semibold text-sky-700 hover:bg-sky-500/30 dark:text-sky-300"
+            >
+              Ayudante: 19.882.112-k
+            </button>
+            <button
+              type="button"
+              onClick={() => { setTab('login'); setRun('18.765.432-1'); setPassword('citt2026'); setError(''); }}
+              className="rounded-lg bg-sky-500/20 px-2 py-1 text-[11px] font-semibold text-sky-700 hover:bg-sky-500/30 dark:text-sky-300"
+            >
+              Global: 18.765.432-1
+            </button>
           </div>
-        )}
-        <p className="text-center text-[10px] text-slate-400">Autenticación validada por el servidor de CITT Stock.</p>
+          <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">Contraseña demo: <span className="font-mono font-bold text-sky-700 dark:text-sky-300">citt2026</span></p>
+        </div>
+
+        <p className="text-center text-[10px] text-slate-400">Autenticación validada con CITT Stock.</p>
       </section>
     </div>
   );

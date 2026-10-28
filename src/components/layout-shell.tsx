@@ -54,7 +54,7 @@ function isStoredSession(value: unknown): value is { profile: SessionProfile; ro
   if (!['ADMIN', 'AYUDANTE', 'GLOBAL'].includes(String(session.role))) return false;
   if (typeof session.accessToken !== 'string' || !session.accessToken) return false;
   const profile = session.profile as Record<string, unknown>;
-  return ['id', 'name', 'email', 'run', 'role', 'school'].every((field) => typeof profile[field] === 'string');
+  return ['name', 'email', 'run', 'role', 'school'].every((field) => typeof profile[field] === 'string');
 }
 
 export function LayoutShell({ children }: { children: React.ReactNode }) {
@@ -70,30 +70,36 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let active = true;
     const restore = async () => {
-    try {
-      const savedSession = window.sessionStorage.getItem(authStorageKey);
-      if (savedSession) {
-        const parsed: unknown = JSON.parse(savedSession);
-        if (!isStoredSession(parsed)) throw new Error('La sesión guardada no tiene un formato válido.');
-        const session = await restoreSession(parsed.accessToken);
-        if (!active) return;
-        window.sessionStorage.setItem(authStorageKey, JSON.stringify(session));
-        setSessionUser(session.profile);
-        setRole(session.role);
-        setAuthenticated(true);
-        setAuthOpen(false);
-      }
-    } catch (error) {
-      console.error('No se pudo restaurar la sesión de CITT Stock.', error);
       try {
-        window.sessionStorage.removeItem(authStorageKey);
-      } catch (storageError) {
-        console.error('No se pudo limpiar la sesión inválida de CITT Stock.', storageError);
+        const savedSession = window.sessionStorage.getItem(authStorageKey);
+        if (savedSession) {
+          const parsed: unknown = JSON.parse(savedSession);
+          if (!isStoredSession(parsed)) throw new Error('La sesión guardada no tiene un formato válido.');
+          try {
+            const session = await restoreSession(parsed.accessToken);
+            if (!active) return;
+            window.sessionStorage.setItem(authStorageKey, JSON.stringify(session));
+            setSessionUser(session.profile);
+            setRole(session.role);
+          } catch {
+            if (!active) return;
+            setSessionUser(parsed.profile);
+            setRole(parsed.role);
+          }
+          setAuthenticated(true);
+          setAuthOpen(false);
+        }
+      } catch (error) {
+        console.error('No se pudo restaurar la sesión de CITT Stock.', error);
+        try {
+          window.sessionStorage.removeItem(authStorageKey);
+        } catch (storageError) {
+          console.error('No se pudo limpiar la sesión inválida de CITT Stock.', storageError);
+        }
+        if (active) toast.error('No se pudo recuperar tu sesión. Inicia sesión nuevamente.');
+      } finally {
+        if (active) setAuthReady(true);
       }
-      if (active) toast.error('No se pudo recuperar tu sesión. Inicia sesión nuevamente.');
-    } finally {
-      if (active) setAuthReady(true);
-    }
     };
     void restore();
     return () => {
@@ -103,7 +109,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!authReady || !authenticated) return;
-    if (role === 'GLOBAL' && pathname !== '/pedidos') router.replace('/pedidos');
+    if (role === 'GLOBAL' && pathname !== '/pedidos' && pathname !== '/') router.replace('/pedidos');
     if (role !== 'ADMIN' && pathname === '/configuracion') router.replace('/');
   }, [authReady, authenticated, pathname, role, router]);
 
@@ -199,7 +205,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
         <nav className="flex-1 space-y-1.5 overflow-y-auto p-3 text-sm font-medium">
           {visibleNavigation.map((item) => {
             const Icon = item.icon;
-            const active = pathname === item.href;
+            const active = pathname === item.href || (role === 'GLOBAL' && pathname === '/' && item.href === '/pedidos');
             return (
               <Link
                 key={item.href}
