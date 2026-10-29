@@ -154,6 +154,158 @@ const demoProfiles: Record<SessionRole, Omit<MemberRecord, 'id' | 'blocked' | 'l
   },
 };
 
+const initialOrders: OrderRecord[] = [
+  {
+    id: 'TRX-00101',
+    assetCode: 'EQ-CITT-089',
+    assetName: 'Kit Arduino Uno R3 Project',
+    quantity: 1,
+    unit: 'unid.',
+    requester: 'Rocío Torres',
+    run: '19.882.112-k',
+    email: 'rocio.torres@duocuc.cl',
+    school: 'Informática',
+    notes: 'Taller de microcontroladores y sensores IoT',
+    status: 'Solicitado',
+    movementType: 'PRESTAMO',
+    createdAt: '2026-10-28T14:30:00.000Z',
+    returnDate: '2026-11-02',
+    ownerRole: 'AYUDANTE',
+    stockDeducted: false,
+    history: [
+      { action: 'Solicitud registrada', actor: 'Rocío Torres', date: '2026-10-28T14:30:00.000Z' },
+    ],
+  },
+  {
+    id: '3D-00045',
+    assetCode: '3D-CITT-005',
+    assetName: 'Filamento PLA 1.75mm Negro',
+    quantity: 150,
+    unit: 'g',
+    requester: 'Camila Soto',
+    run: '18.765.432-1',
+    email: 'camila.soto@duocuc.cl',
+    school: 'Administración',
+    notes: 'Impresión prototipos para presentación de innovación',
+    status: 'Solicitado',
+    movementType: 'PEDIDO',
+    createdAt: '2026-10-29T09:15:00.000Z',
+    returnDate: '',
+    ownerRole: 'GLOBAL',
+    stockDeducted: false,
+    history: [
+      { action: 'Solicitud registrada', actor: 'Camila Soto', date: '2026-10-29T09:15:00.000Z' },
+    ],
+  },
+  {
+    id: 'TRX-00098',
+    assetCode: 'TA-CITT-012',
+    assetName: 'Estación de Soldar Weller 60W',
+    quantity: 1,
+    unit: 'unid.',
+    requester: 'Matías Tapia',
+    run: '20.112.334-3',
+    email: 'matias.tapia@duocuc.cl',
+    school: 'Mecánica',
+    notes: 'Práctica de soldadura de circuitos de control',
+    status: 'Preparado',
+    movementType: 'PRESTAMO',
+    createdAt: '2026-10-27T11:00:00.000Z',
+    returnDate: '2026-10-31',
+    ownerRole: 'GLOBAL',
+    stockDeducted: false,
+    history: [
+      { action: 'Solicitud registrada', actor: 'Matías Tapia', date: '2026-10-27T11:00:00.000Z' },
+      { action: 'Pedido aceptado', actor: 'Paz Constanza Morales Saavedra', date: '2026-10-27T11:45:00.000Z' },
+      { action: 'Pedido preparado', actor: 'Rocío Torres', date: '2026-10-27T15:20:00.000Z' },
+    ],
+  },
+  {
+    id: 'TRX-00095',
+    assetCode: 'EQ-CITT-089',
+    assetName: 'Kit Arduino Uno R3 Project',
+    quantity: 3,
+    unit: 'unid.',
+    requester: 'Rocío Torres',
+    run: '19.882.112-k',
+    email: 'rocio.torres@duocuc.cl',
+    school: 'Informática',
+    notes: 'Taller práctico de robótica avanzada CITT',
+    status: 'Recibido',
+    movementType: 'PRESTAMO',
+    createdAt: '2026-10-25T10:00:00.000Z',
+    returnDate: '2026-11-05',
+    ownerRole: 'AYUDANTE',
+    stockDeducted: true,
+    history: [
+      { action: 'Préstamo registrado con firma digital', actor: 'Paz Constanza Morales Saavedra', date: '2026-10-25T10:00:00.000Z' },
+    ],
+  },
+  {
+    id: 'TRX-00092',
+    assetCode: 'TA-CITT-012',
+    assetName: 'Estación de Soldar Weller 60W',
+    quantity: 2,
+    unit: 'unid.',
+    requester: 'Andrés Rojas',
+    run: '21.456.789-2',
+    email: 'andres.rojas@duocuc.cl',
+    school: 'Construcción',
+    notes: 'Reparación de maquetas electrificadas',
+    status: 'Recibido',
+    movementType: 'PRESTAMO',
+    createdAt: '2026-10-24T16:00:00.000Z',
+    returnDate: '2026-10-28',
+    ownerRole: 'GLOBAL',
+    stockDeducted: true,
+    history: [
+      { action: 'Préstamo registrado con firma digital', actor: 'Rocío Torres', date: '2026-10-24T16:00:00.000Z' },
+    ],
+  },
+  {
+    id: '3D-00040',
+    assetCode: '3D-CITT-005',
+    assetName: 'Filamento PLA 1.75mm Negro',
+    quantity: 50,
+    unit: 'g',
+    requester: 'Camila Soto',
+    run: '18.765.432-1',
+    email: 'camila.soto@duocuc.cl',
+    school: 'Administración',
+    notes: 'Impresión de soportes para señalética CITT',
+    status: 'Recibido',
+    movementType: 'PEDIDO',
+    createdAt: '2026-10-22T14:10:00.000Z',
+    returnDate: '',
+    ownerRole: 'GLOBAL',
+    stockDeducted: true,
+    history: [
+      { action: 'Pedido recepcionado y stock actualizado', actor: 'Paz Constanza Morales Saavedra', date: '2026-10-22T14:10:00.000Z' },
+    ],
+  },
+  {
+    id: 'IM-00010',
+    assetCode: 'IM-CITT-001',
+    assetName: 'Sillas Plateadas Plegables CITT',
+    quantity: 8,
+    unit: 'unid.',
+    requester: 'Paz Constanza Morales Saavedra',
+    run: '16.321.654-8',
+    email: 'pc.morales@profesor.duoc.cl',
+    school: 'Administración',
+    notes: 'Evento hackathon CITT sede San Bernardo',
+    status: 'Recibido',
+    movementType: 'PRESTAMO',
+    createdAt: '2026-10-26T08:30:00.000Z',
+    returnDate: '2026-11-01',
+    ownerRole: 'ADMIN',
+    stockDeducted: true,
+    history: [
+      { action: 'Préstamo registrado con firma digital', actor: 'Paz Constanza Morales Saavedra', date: '2026-10-26T08:30:00.000Z' },
+    ],
+  },
+];
+
 const initialData: AppData = {
   assets: [
     {
@@ -216,7 +368,7 @@ const initialData: AppData = {
     { id: 'M-005', name: 'Andrés Rojas', email: 'andres.rojas@duocuc.cl', run: '21.456.789-2', role: 'Alumno', school: 'Construcción', blocked: true, loans: 2, overdueDays: 2 },
     { id: 'M-004', name: 'Paz Constanza Morales Saavedra', email: 'pc.morales@profesor.duoc.cl', run: '16.321.654-8', role: 'Administrador', school: 'Administración', blocked: false, loans: 0, overdueDays: 0 },
   ],
-  orders: [],
+  orders: initialOrders,
   workOrders: [
     { id: 'OT-2026-001', asset: 'Fuente Poder Regulada 30V', category: 'Equipamiento', type: 'Preventivo', description: 'Calibración de voltaje de salida y cambio de fusible interno.', technician: 'Lab Electrónica', date: '2026-10-20', status: 'En Proceso', observations: [] },
     { id: 'OT-2026-002', asset: 'Impresora 3D Ender 3 V2 (#02)', category: '3D', type: 'Correctivo', description: 'Boquilla obstruida y desalineación de eje Z.', technician: 'FabLab CITT', date: '2026-10-18', status: 'Diagnóstico', observations: [] },
@@ -275,6 +427,11 @@ function isAppData(value: unknown): value is { role?: SessionRole; data?: AppDat
     Boolean(data.settings && Array.isArray(data.dismissedAlerts));
 }
 
+function populateOrdersIfEmpty(orders?: OrderRecord[]): OrderRecord[] {
+  if (!orders || orders.length === 0) return initialOrders;
+  return orders;
+}
+
 function addMissingAssetImages(data: AppData): AppData {
   return {
     ...data,
@@ -303,7 +460,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         // These updates hydrate browser-persisted state after the server render.
         // eslint-disable-next-line react-hooks/set-state-in-effect
         if (parsed.role) setRole(parsed.role);
-        if (parsed.data) setData(addMissingAssetImages(parsed.data));
+        if (parsed.data) setData({ ...addMissingAssetImages(parsed.data), orders: populateOrdersIfEmpty(parsed.data.orders) });
       }
     } catch (error) {
       console.error('No se pudieron cargar los datos guardados de CITT Stock.', error);

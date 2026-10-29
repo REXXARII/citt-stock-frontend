@@ -115,6 +115,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
     data.assets.filter((asset) => asset.available === 0 || asset.available / Math.max(asset.total, 1) * 100 <= data.settings.lowStockThreshold).length +
     data.members.filter((member) => member.blocked).length +
     data.workOrders.filter((order) => order.status !== 'Finalizada').length;
+  const pendingOrderCount = data.orders.filter((order) => order.status === 'Solicitado').length;
   const userInitials = currentUser.name
     .split(/\s+/)
     .slice(0, 2)
@@ -205,14 +206,32 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 title={collapsed ? item.label : undefined}
-                className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 transition ${
+                className={`relative flex items-center gap-3 rounded-xl px-3.5 py-2.5 transition ${
                   active
                     ? 'bg-sky-500/15 font-semibold text-sky-600 dark:text-sky-400'
                     : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800/60'
                 }`}
               >
-                <Icon className="h-5 w-5 shrink-0" />
+                <div className="relative shrink-0">
+                  <Icon className="h-5 w-5" />
+                  {collapsed && item.href === '/gestion-pedidos' && pendingOrderCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
+                    </span>
+                  )}
+                  {collapsed && item.href === '/alertas' && activeAlertCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-rose-500" />
+                    </span>
+                  )}
+                </div>
                 {!collapsed && <span className="truncate">{item.label}</span>}
+                {!collapsed && item.href === '/gestion-pedidos' && pendingOrderCount > 0 && (
+                  <span className="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-white">
+                    {pendingOrderCount}
+                  </span>
+                )}
                 {!collapsed && item.href === '/alertas' && activeAlertCount > 0 && (
                   <span className="ml-auto rounded-full bg-rose-500 px-2 py-0.5 text-xs font-bold text-white">{activeAlertCount}</span>
                 )}

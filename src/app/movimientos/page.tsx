@@ -27,7 +27,7 @@ export default function MovimientosPage() {
   const [signatureOpen, setSignatureOpen] = useState(false);
   const [receiptOrder, setReceiptOrder] = useState<OrderRecord | null>(null);
   const [query, setQuery] = useState('');
-  const [typeFilter, setTypeFilter] = useState('Todos');
+  const [typeFilter, setTypeFilter] = useState('Todos los Tipos');
   const [dateFilter, setDateFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('Todos');
   const [view, setView] = useState<'list' | 'grid'>('list');
@@ -44,7 +44,7 @@ export default function MovimientosPage() {
   const visibleOrders = useMemo(() => data.orders.filter((order) => {
     const movementName = movementTypeLabel(order.movementType ?? 'PRESTAMO');
     const queryMatches = `${order.id} ${order.assetCode} ${order.assetName} ${order.requester} ${order.run} ${order.school}`.toLowerCase().includes(query.toLowerCase());
-    const typeMatches = typeFilter === 'Todos los Tipos' || typeFilter === movementName;
+    const typeMatches = typeFilter === 'Todos los Tipos' || typeFilter === 'Todos' || typeFilter === movementName;
     const dateMatches = !dateFilter || order.createdAt.slice(0, 10) === dateFilter;
     const statusMatches = statusFilter === 'Todos' || order.status === statusFilter;
     return queryMatches && typeMatches && dateMatches && statusMatches;

@@ -199,8 +199,8 @@ export default function PedidosPage() {
                 { value: 'Disponible', label: 'Disponible' },
                 { value: 'Sin Stock', label: 'Sin Stock' },
               ]}
-              activePill={orderStatusFilter}
-              onPillChange={setOrderStatusFilter}
+              activePill={statusFilter}
+              onPillChange={setStatusFilter}
               view={view}
               onViewChange={setView}
             />
@@ -256,8 +256,8 @@ export default function PedidosPage() {
             ]}
             onFilterChange={setOrderTypeFilter}
             pills={['Todos', 'Solicitado', 'Aceptado', 'Preparado', 'Enviado', 'Recibido', 'Rechazado'].map((item) => ({ value: item, label: item }))}
-            activePill={statusFilter}
-            onPillChange={setStatusFilter}
+            activePill={orderStatusFilter}
+            onPillChange={setOrderStatusFilter}
             view={view}
             onViewChange={setView}
           />

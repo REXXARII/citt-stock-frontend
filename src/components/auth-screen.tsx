@@ -96,6 +96,7 @@ export function AuthScreen({ open, onAuthenticate, onRegister }: AuthScreenProps
           <Button type="submit" disabled={isSubmitting} className="w-full">{isSubmitting ? 'Conectando...' : tab === 'login' ? 'Ingresar' : 'Crear cuenta y continuar'}</Button>
         </form>
 
+<<<<<<< Updated upstream
         <p className="text-center text-[10px] text-slate-400">Autenticación local de demostración; no reemplaza un servicio de acceso real.</p>
         {process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN === 'true' && (
           <div className="rounded-xl bg-sky-500/10 p-3 text-xs leading-relaxed text-sky-800 dark:text-sky-200">
@@ -105,6 +106,9 @@ export function AuthScreen({ open, onAuthenticate, onRegister }: AuthScreenProps
           </div>
         )}
         <p className="text-center text-[10px] text-slate-400">Autenticación validada por el servidor de CITT Stock.</p>
+=======
+        <p className="text-center text-[10px] text-slate-400">Autenticación validada con CITT Stock.</p>
+>>>>>>> Stashed changes
       </section>
     </div>
   );
